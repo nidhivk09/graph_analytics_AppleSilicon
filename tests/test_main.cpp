@@ -1,10 +1,20 @@
 // gtest: tiny assert-based test runner (no googletest dependency).
 // Register tests with TEST(name) { ... } and check with CHECK(cond).
 // A failing CHECK records the failure and continues with the next test.
+#include "cpu/bfs_cpu.hpp"
+#include "graph/csr.hpp"
+#include "graph/generators.hpp"
+#include "graph/snap.hpp"
+#include "graph/transform.hpp"
 #include "metal/context.hpp"
+
+#include <cstdlib>
+#include <unistd.h>
+#include <zlib.h>
 
 #include <omp.h>
 #include <cstdio>
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -74,6 +84,191 @@ TEST(metal_vector_add_sizes) {
     }
 }
 
+
+// ---------------------------------------------------------------- Phase 1
+
+using graph::CSR;
+using EdgeList = std::vector<std::pair<uint32_t, uint32_t>>;
+
+// Scratch file path, unique per process; removed by the tests that create it.
+static std::string tmpPath(const std::string& name) {
+    const char* dir = std::getenv("TMPDIR");
+    std::string d = dir ? dir : "/tmp";
+    if (!d.empty() && d.back() != '/') d += '/';
+    return d + "ggpu_test_" + std::to_string(getpid()) + "_" + name;
+}
+
+static bool hasEdge(const CSR& g, uint32_t u, uint32_t v) {
+    return std::binary_search(g.begin(u), g.end(u), v);
+}
+
+TEST(generators_valid_and_shaped) {
+    for (auto& [name, g] : graph::gen::suite()) {
+        std::string err = graph::validate(g);
+        if (!err.empty()) std::printf("    %s: %s\n", name.c_str(), err.c_str());
+        CHECK(err.empty());
+    }
+    CSR p = graph::gen::path(1000);
+    CHECK(p.n == 1000 && p.m == 2 * 999);
+    CSR st = graph::gen::star(100000);
+    CHECK(st.n == 100001 && st.degree(0) == 100000 && st.degree(5) == 1);
+    CSR k = graph::gen::complete(200);
+    CHECK(k.m == 200ull * 199);
+    CHECK(graph::gen::empty(1000).m == 0);
+    CSR gr = graph::gen::grid2d(100, 100);
+    CHECK(gr.m == 2ull * 2 * 100 * 99);
+    CSR r = graph::gen::rmat(12, 16, true, 43);
+    CHECK(r.directed() && r.n == 4096 && r.m > 30000);
+}
+
+TEST(csr_save_load_roundtrip) {
+    for (auto& [name, g] : graph::gen::suite()) {
+        std::string f = tmpPath(name + ".bin");
+        graph::save(g, f);
+        CSR h = graph::load(f);
+        unlink(f.c_str());
+        CHECK(graph::equal(g, h));
+        CHECK(graph::validate(h).empty());
+    }
+}
+
+TEST(load_rejects_bad_files) {
+    std::string f = tmpPath("bad.bin");
+    FILE* fp = std::fopen(f.c_str(), "wb");
+    std::fputs("definitely not a graph file, but longer than a header", fp);
+    std::fclose(fp);
+    bool threw = false;
+    try { graph::load(f); } catch (const std::exception&) { threw = true; }
+    unlink(f.c_str());
+    CHECK(threw);
+}
+
+TEST(transpose_of_transpose_is_identity) {
+    for (auto& [name, g] : graph::gen::suite()) {
+        CSR t = graph::transpose(g);
+        CHECK(graph::validate(t).empty());
+        CHECK(graph::equal(graph::transpose(t), g));
+        if (!g.directed()) CHECK(graph::equal(t, g));  // symmetric graphs are self-transpose
+    }
+    // Edge-level check on the directed graph: u->v in G iff v->u in G^T.
+    CSR g = graph::gen::rmat(12, 16, true, 43);
+    CSR t = graph::transpose(g);
+    for (uint32_t u = 0; u < g.n; ++u)
+        for (const uint32_t* p = g.begin(u); p != g.end(u); ++p) CHECK(hasEdge(t, *p, u));
+}
+
+TEST(symmetrize_is_symmetric) {
+    CSR g = graph::gen::rmat(12, 16, true, 43);
+    CSR s = graph::symmetrize(g);
+    CHECK(!s.directed());
+    CHECK(graph::validate(s).empty());
+    CHECK(graph::equal(graph::transpose(s), CSR(s)));  // s == s^T
+    for (uint32_t u = 0; u < g.n; ++u)                   // contains every original edge both ways
+        for (const uint32_t* p = g.begin(u); p != g.end(u); ++p)
+            CHECK(hasEdge(s, u, *p) && hasEdge(s, *p, u));
+    CHECK(s.m <= 2 * g.m && s.m >= g.m);
+    // Undirected input: returned as-is, sharing storage.
+    CSR gr = graph::gen::grid2d(10, 10);
+    CHECK(graph::symmetrize(gr).col_idx == gr.col_idx);
+}
+
+// Converter on a hand-written SNAP-style file covering the awkward cases:
+// comments, blank lines, tabs/spaces/CRLF, sparse and 1-based IDs, duplicates,
+// self-loops, an ID seen only as a target, and no trailing newline.
+TEST(converter_handles_snap_quirks) {
+    const char* text =
+        "# Directed graph: toy.txt\n"
+        "# FromNodeId\tToNodeId\n"
+        "10\t20\n"
+        "20 30\r\n"
+        "\n"
+        "10\t20\n"          // duplicate
+        "30\t30\n"          // self-loop
+        "% another comment style\n"
+        "  30\t10  \n"
+        "1000\t20\n"
+        "20\t5000";         // 5000 only ever a target; no trailing newline
+    // Dense IDs in raw-ID order: 10->0, 20->1, 30->2, 1000->3, 5000->4.
+    EdgeList dir = {{0, 1}, {1, 2}, {2, 0}, {3, 1}, {1, 4}};
+
+    for (bool gz : {true, false}) {
+        std::string in = tmpPath(gz ? "toy.txt.gz" : "toy.txt");
+        if (gz) {
+            gzFile f = gzopen(in.c_str(), "wb");
+            gzputs(f, text);
+            gzclose(f);
+        } else {
+            FILE* f = std::fopen(in.c_str(), "wb");
+            std::fputs(text, f);
+            std::fclose(f);
+        }
+        for (bool directed : {true, false}) {
+            std::string out = tmpPath("toy.bin");
+            graph::ConvertStats st = graph::convertSnap(in, out, directed);
+            CSR g = graph::load(out);
+            unlink(out.c_str());
+            CHECK(st.lines == 7 && st.n == 5 && st.raw_max_id == 5000);
+            CHECK(graph::validate(g).empty());
+            CHECK(graph::equal(g, graph::fromEdgeList(5, dir, directed)));
+            CHECK(g.directed() == directed);
+            CHECK(g.m == (directed ? 5u : 10u));
+        }
+        unlink(in.c_str());
+    }
+}
+
+TEST(converter_rejects_malformed_input) {
+    std::string in = tmpPath("bad.txt");
+    FILE* f = std::fopen(in.c_str(), "wb");
+    std::fputs("1 2\n3\n", f);  // second line has one field
+    std::fclose(f);
+    bool threw = false;
+    try { graph::convertSnap(in, tmpPath("bad_out.bin"), true); } catch (const std::exception&) { threw = true; }
+    unlink(in.c_str());
+    CHECK(threw);
+}
+
+// Larger converter round-trip: dump an R-MAT graph as text, convert, compare.
+TEST(converter_matches_in_memory_build) {
+    CSR g = graph::gen::rmat(12, 16, true, 7);
+    std::string in = tmpPath("rmat.txt.gz"), out = tmpPath("rmat.bin");
+    gzFile f = gzopen(in.c_str(), "wb");
+    gzprintf(f, "# rmat dump\n");
+    // Shift IDs by 1 (SNAP-style 1-based); relabeling must undo the shift.
+    for (uint32_t u = 0; u < g.n; ++u)
+        for (const uint32_t* p = g.begin(u); p != g.end(u); ++p) gzprintf(f, "%u\t%u\n", u + 1, *p + 1);
+    gzclose(f);
+    graph::convertSnap(in, out, true);
+    CSR h = graph::load(out);
+    unlink(in.c_str());
+    unlink(out.c_str());
+    // Isolated R-MAT vertices never appear in the text, so compare after
+    // dropping them from g.
+    std::vector<uint32_t> keep(g.n, cpu::kUnreached);
+    std::vector<uint8_t> present(g.n, 0);
+    for (uint32_t u = 0; u < g.n; ++u)
+        for (const uint32_t* p = g.begin(u); p != g.end(u); ++p) present[u] = present[*p] = 1;
+    uint32_t n2 = 0;
+    for (uint32_t v = 0; v < g.n; ++v) if (present[v]) keep[v] = n2++;
+    EdgeList e;
+    for (uint32_t u = 0; u < g.n; ++u)
+        for (const uint32_t* p = g.begin(u); p != g.end(u); ++p) e.push_back({keep[u], keep[*p]});
+    CHECK(graph::equal(h, graph::fromEdgeList(n2, e, true)));
+}
+
+TEST(bfs_serial_known_answers) {
+    auto d = cpu::bfsSerial(graph::gen::path(1000), 0);
+    for (uint32_t i = 0; i < 1000; ++i) CHECK(d[i] == i);
+    d = cpu::bfsSerial(graph::gen::star(100000), 7);
+    CHECK(d[7] == 0 && d[0] == 1 && d[8] == 2);
+    d = cpu::bfsSerial(graph::gen::twoComponents(), 0);
+    CHECK(d[299] == 299 && d[300] == cpu::kUnreached && d[399] == cpu::kUnreached);
+    d = cpu::bfsSerial(graph::gen::grid2d(100, 100), 0);
+    CHECK(d[99 * 100 + 99] == 198);
+    d = cpu::bfsSerial(graph::gen::empty(1000), 3);
+    CHECK(d[3] == 0 && d[4] == cpu::kUnreached);
+}
+
 // ---------------------------------------------------------------- runner
 
 int main() {
@@ -81,7 +276,12 @@ int main() {
     for (auto& t : registry()) {
         g_current_failed = false;
         std::printf("[ RUN  ] %s\n", t.name.c_str());
-        t.fn();
+        try {
+            t.fn();
+        } catch (const std::exception& e) {
+            std::printf("    unexpected exception: %s\n", e.what());
+            g_current_failed = true;
+        }
         if (g_current_failed) { ++g_failures; std::printf("[ FAIL ] %s\n", t.name.c_str()); }
         else { ++passed; std::printf("[  OK  ] %s\n", t.name.c_str()); }
     }

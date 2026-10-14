@@ -23,15 +23,23 @@ LDFLAGS  := $(MACOS_MIN) -L$(LIBOMP)/lib
 LDLIBS   := -lomp -framework Metal -framework Foundation -lz
 
 # Code shared by every executable. Grows phase by phase.
-LIB_SRCS := src/metal/context.mm
+LIB_SRCS := src/metal/context.mm \
+            src/graph/csr.cpp src/graph/snap.cpp src/graph/transform.cpp \
+            src/graph/generators.cpp src/cpu/bfs_cpu.cpp
 LIB_OBJS := $(patsubst src/%,$(OBJDIR)/%.o,$(LIB_SRCS))
 
-BINS := $(BUILD)/gmicro $(BUILD)/gtest
+BINS := $(BUILD)/gmicro $(BUILD)/gtest $(BUILD)/gconvert $(BUILD)/gstats
 
 .PHONY: all test clean
 all: $(BINS)
 
 $(BUILD)/gmicro: $(OBJDIR)/bench/micro.mm.o $(LIB_OBJS)
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+$(BUILD)/gconvert: $(OBJDIR)/graph/convert.cpp.o $(LIB_OBJS)
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+$(BUILD)/gstats: $(OBJDIR)/graph/stats.cpp.o $(LIB_OBJS)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD)/gtest: $(OBJDIR)/tests/test_main.cpp.o $(LIB_OBJS)

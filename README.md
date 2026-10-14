@@ -5,7 +5,7 @@ Metal compute shaders, compared against OpenMP CPU baselines, with careful
 benchmarking on SNAP graphs. See `PLAN.md` for the full design and
 `PROGRESS.md` for the running log.
 
-> Status: **Phase 0 (scaffold)**. Results and figures will appear here as phases complete.
+> Status: **Phase 1 (graph I/O + datasets)**. Results and figures will appear here as phases complete.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ benchmarking on SNAP graphs. See `PLAN.md` for the full design and
 
 ```sh
 ./scripts/env_check.sh     # machine facts: chip, cores, memory, disk, toolchain
-make                       # builds build/gmicro, build/gtest, ...
+make                       # builds build/{gconvert,gstats,gmicro,gtest}
 make test                  # unit tests
 ./build/gmicro --hello     # Metal smoke test + device properties
 ./build/gmicro --omp       # OpenMP smoke test
@@ -44,4 +44,14 @@ analysis/   plotting; results/ CSVs; figures/ plots; docs/REPORT.md
 ## Data
 
 Datasets come from SNAP and are converted to a compact binary CSR (`data/*.bin`,
-not committed). `scripts/download.sh` arrives in Phase 1.
+not committed; format in `PLAN.md` 4.2).
+
+```sh
+./scripts/download.sh                 # all six datasets (~1.4 GB of .bin; .gz deleted after)
+./scripts/download.sh web-Google      # or just some of them
+./build/gstats data/web-Google.bin    # stats -> results/dataset_stats.csv, degree_hist.csv
+./build/gconvert in.txt.gz out.bin --directed|--undirected   # any SNAP edge list
+```
+
+The converter streams the gzip file twice (count, then scatter) and never
+holds an edge list, so peak memory is about 4 bytes per stored edge.
