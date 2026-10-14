@@ -1,0 +1,8 @@
+data/
+build/
+.venv/
+*.bin
+*.gz
+.DS_Store
+__pycache__/
+.dist/
