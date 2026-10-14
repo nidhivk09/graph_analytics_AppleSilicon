@@ -269,6 +269,77 @@ TEST(bfs_serial_known_answers) {
     CHECK(d[3] == 0 && d[4] == cpu::kUnreached);
 }
 
+
+// ---------------------------------------------------------------- Phase 2
+
+// Sources for exhaustive checks: first, middle and last vertex plus a few
+// random ones; isolated vertices included on purpose (dist = 0 at the source only).
+static std::vector<uint32_t> testSources(const CSR& g) {
+    std::vector<uint32_t> s = {0, (uint32_t)(g.n / 2), (uint32_t)(g.n - 1)};
+    uint64_t x = 12345;
+    for (int i = 0; i < 3; ++i) { x = x * 6364136223846793005ull + 1442695040888963407ull; s.push_back((uint32_t)((x >> 33) % g.n)); }
+    return s;
+}
+
+static uint64_t reachedCount(const std::vector<uint32_t>& d) {
+    uint64_t c = 0;
+    for (uint32_t x : d) c += x != cpu::kUnreached;
+    return c;
+}
+
+TEST(cpu_omp_matches_serial_all_schedules_threads) {
+    for (auto& [name, g0] : graph::gen::suite()) {
+        CSR g = graph::symmetrize(g0);
+        for (uint32_t src : testSources(g)) {
+            auto ref = cpu::bfsSerial(g, src);
+            for (auto sch : {cpu::Schedule::Static, cpu::Schedule::Dynamic64, cpu::Schedule::Guided})
+                for (int nt : {1, 3, 8}) {
+                    cpu::BfsOptions o;
+                    o.schedule = sch;
+                    o.threads = nt;
+                    std::vector<uint32_t> d(g.n);
+                    std::vector<util::BfsLevel> tr;
+                    cpu::bfsOmp(g, src, d.data(), o, &tr);
+                    if (d != ref) std::printf("    %s src %u sched %s threads %d\n", name.c_str(), src, cpu::scheduleName(sch), nt);
+                    CHECK(d == ref);
+                    uint64_t sum = 0;
+                    for (auto& L : tr) sum += L.frontier;
+                    CHECK(sum == reachedCount(ref));
+                }
+        }
+    }
+}
+
+TEST(cpu_do_matches_serial_forced_directions) {
+    struct AB { double a, b; const char* what; };
+    const AB modes[] = {{15, 18, "default"}, {1e-12, 18, "all top-down"},
+                        {1e12, 1e12, "all bottom-up"}, {2, 4, "frequent switching"}};
+    for (auto& [name, g0] : graph::gen::suite()) {
+        CSR g = graph::symmetrize(g0);
+        for (uint32_t src : testSources(g)) {
+            auto ref = cpu::bfsSerial(g, src);
+            for (auto m : modes)
+                for (int nt : {1, 8}) {
+                    cpu::BfsOptions o;
+                    o.alpha = m.a;
+                    o.beta = m.b;
+                    o.threads = nt;
+                    std::vector<uint32_t> d(g.n);
+                    std::vector<util::BfsLevel> tr;
+                    cpu::bfsDO(g, src, d.data(), o, &tr);
+                    if (d != ref) std::printf("    %s src %u mode %s threads %d\n", name.c_str(), src, m.what, nt);
+                    CHECK(d == ref);
+                    uint64_t sum = 0;
+                    bool sawBU = false;
+                    for (auto& L : tr) { sum += L.frontier; sawBU |= L.direction == 'B'; }
+                    CHECK(sum == reachedCount(ref));
+                    if (m.a > 1e6 && reachedCount(ref) > 1) CHECK(sawBU);
+                    if (m.a < 1e-6) CHECK(!sawBU);
+                }
+        }
+    }
+}
+
 // ---------------------------------------------------------------- runner
 
 int main() {

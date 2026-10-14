@@ -28,7 +28,7 @@ LIB_SRCS := src/metal/context.mm \
             src/graph/generators.cpp src/cpu/bfs_cpu.cpp
 LIB_OBJS := $(patsubst src/%,$(OBJDIR)/%.o,$(LIB_SRCS))
 
-BINS := $(BUILD)/gmicro $(BUILD)/gtest $(BUILD)/gconvert $(BUILD)/gstats
+BINS := $(BUILD)/gmicro $(BUILD)/gtest $(BUILD)/gconvert $(BUILD)/gstats $(BUILD)/gbench
 
 .PHONY: all test clean
 all: $(BINS)
@@ -37,6 +37,9 @@ $(BUILD)/gmicro: $(OBJDIR)/bench/micro.mm.o $(LIB_OBJS)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD)/gconvert: $(OBJDIR)/graph/convert.cpp.o $(LIB_OBJS)
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+$(BUILD)/gbench: $(OBJDIR)/bench/main.cpp.o $(LIB_OBJS)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD)/gstats: $(OBJDIR)/graph/stats.cpp.o $(LIB_OBJS)

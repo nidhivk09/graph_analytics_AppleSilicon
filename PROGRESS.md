@@ -4,8 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 1 complete** (2026-10-14). Waiting for approval to start Phase 2.
-- Next: Phase 2 (cpu_omp, cpu_do, gbench CLI with CSV output, NetworkX validation, P/E-core scaling experiment).
+- **Phase 2 complete** (2026-10-14). Waiting for approval to start Phase 3.
+- Next: Phase 3 (gmicro --bandwidth / --launch / --random microbenchmarks).
 - All six datasets are in `data/*.bin` (1.3 GB). Rebuild them with `scripts/download.sh`.
 
 ## Measured machine facts (Phase 0)
@@ -99,3 +99,71 @@ command-buffer setup). OpenMP: 8 threads by default.
 
 **Open issues**
 - Low Power Mode / battery check still needed before Phase 2 timings.
+
+### 2026-10-14 · Phase 2: CPU BFS baselines
+
+**Done**
+- `src/cpu/bfs_cpu.{hpp,cpp}`: `bfsSerial` (reference), `bfsOmp` and `bfsDO`. All variants write into a caller-provided `dist`, so the output allocation is untimed while initialization is timed.
+  - `cpu_omp`: level-synchronous top-down. Neighbors are claimed with a relaxed CAS after a plain-load pre-check, and the next frontier is filled through thread-local 4096-entry buffers with one `fetch_add` per flush. The schedule is set via `omp_set_schedule` + `schedule(runtime)`.
+  - `cpu_do`: Beamer direction-optimizing BFS with the GAP control flow. Go TD→BU when `scout > edges_to_check/alpha`; stay BU while `awake >= old_awake || awake > n/beta`. Bottom-up uses a bitmap frontier, an early exit at the first parent found, and no atomics on `dist`. Queue↔bitmap conversions are counted in the level time.
+- `src/util/trace.hpp` (`BfsLevel`: level, frontier, edges examined, direction, device, ms), shared with the future GPU and hybrid code. `cpu_omp` and `cpu_do` fill it.
+- `src/bench/main.cpp` (`gbench`): variant registry; `--graph file.bin | synth:NAME`; fixed-seed sources; warm-up and trials; `--validate` (exact check against cpu_serial on every trial); CSV in the PLAN 8 schema; `--trace`; `--dump-dist`; `--save-graph`. Summary line: median and min time, plus the harmonic mean of per-source GTEPS (from per-source median time).
+- `src/util/sysinfo.hpp`: timestamp, chip, git commit (with `+` suffix if the tree is dirty), load average.
+- `tools/validate_networkx.py`: reads `.bin` with numpy and compares `gbench --dump-dist` of cpu_serial with `networkx.single_source_shortest_path_length`. Writes `results/validate_networkx.csv`. (The PageRank half comes in Phase 8.)
+- `scripts/scaling_cpu.sh` → `results/scaling_cpu_bfs.csv`.
+- Tests (13 total, all pass): cpu_omp × {static, dynamic/64, guided} × {1, 3, 8} threads, and cpu_do in {default, all top-down, all bottom-up, frequent switching} × {1, 8} threads, on every synthetic graph from 6 sources each, including isolated vertices. Distances must be exact, and trace frontier sizes must sum to the number of reached vertices.
+
+**Validation**
+- All CPU variants match cpu_serial exactly on all 6 datasets × 64 sources, and on every row of every CSV produced in this phase.
+- NetworkX: **35/35 checks OK**, with 0 mismatches. That's 3–4 sources on each of the 8 synthetic graphs, ego-Facebook and web-Google (NetworkX peak RSS 1.24 GB on web-Google).
+
+**CPU baseline** (`results/bfs_cpu.csv`: 64 sources × (2 warm-up + 5 trials), 8 threads, cpu_omp dynamic/64, cpu_do α=15 β=18). AC power, Low Power Mode off.
+
+| dataset | serial ms | omp ms | do ms | serial GTEPS | omp GTEPS | do GTEPS |
+|---|---|---|---|---|---|---|
+| ego-Facebook | 0.10 | 0.32 | 0.38 | 0.868 | 0.272 | 0.223 |
+| web-Google | 32.6 | 15.2 | 6.9 | 0.129 | 0.280 | 0.592 |
+| roadNet-CA | 37.5 | 39.3 | 41.3 | 0.073 | 0.069 | 0.067 |
+| soc-Pokec | 162.3 | 54.7 | 8.8 | 0.137 | 0.403 | 2.483 |
+| soc-LiveJournal1 | 424.7 | 138.7 | 22.4 | 0.101 | 0.301 | 1.864 |
+| com-Orkut | 554.8 | 221.9 | 28.0 | 0.213 | 0.525 | **3.987** |
+
+**P-core/E-core scaling** (`results/scaling_cpu_bfs.csv`: 16 sources × 3 trials, median ms)
+
+| roadNet-CA | 1 | 2 | 4 | 6 | 8 |
+|---|---|---|---|---|---|
+| static | 46.4 | 27.2 | 21.0 | 34.8 | 38.3 |
+| dynamic/64 | 46.9 | 28.2 | 20.8 | 34.1 | 38.0 |
+| guided | 46.7 | 27.1 | 20.8 | 34.3 | 39.7 |
+| cpu_do | 46.7 | 28.5 | 20.8 | 33.6 | 39.3 |
+
+| soc-LiveJournal1 | 1 | 2 | 4 | 6 | 8 |
+|---|---|---|---|---|---|
+| static | 563.0 | 357.4 | 226.3 | 180.4 | 166.9 |
+| dynamic/64 | 561.3 | 298.8 | 184.1 | 160.0 | 140.8 |
+| guided | 568.6 | 298.6 | 185.5 | 162.4 | 136.1 |
+| cpu_do | 91.3 | 48.8 | 30.3 | 26.1 | 22.5 |
+
+Serial: roadNet-CA 37.9 ms, LiveJournal 424.7 ms.
+
+**Interpretation**
+- *Static scheduling underperforms* on LiveJournal by 1.13–1.23× against the best of dynamic and guided. That confirms the PLAN hypothesis, but the cause is mostly **degree imbalance**, not just P/E asymmetry: the penalty is already 1.20–1.23× at 2 and 4 threads, where all threads fit on P-cores. Static gives each thread a contiguous block of frontier vertices, and on a power-law graph those blocks have very unequal edge counts. On roadNet-CA (max degree 12) the schedule makes no difference.
+- *E-cores hurt high-diameter graphs.* roadNet-CA is fastest at 4 threads (20.8 ms) and gets slower at 6 (34) and 8 (38) threads with every schedule. Its ~600–800 levels each process tiny frontiers, so per-level fork/join barrier cost dominates. Once threads span both clusters, each barrier waits on slower E-cores and cross-cluster cache traffic: (38 − 21) ms / ~700 levels ≈ 20–25 µs extra per level. This is the CPU-side counterpart of the GPU per-level sync cost that Phase 7 targets.
+- *Weak scaling from 4 to 8 threads on LiveJournal* (dynamic: 184 → 141 ms, 1.3×): adding E-cores helps, but much less than adding P-cores did (1 → 4 threads: 3.0×).
+- *One-thread cpu_omp is 1.3× slower than cpu_serial* (561 vs 425 ms on LiveJournal). That's the cost of the CAS claim plus buffer and reduction machinery. Real parallel speedup over serial at 8 threads is about 3×.
+- *Direction optimization is the big algorithmic win:* 6.2× over cpu_omp on LiveJournal, 7.9× on Orkut, 6.2× on Pokec, 2.2× on web-Google, and nothing on roadNet-CA. On roadNet-CA the frontier never exceeds `edges_to_check/alpha`, so it never switches to bottom-up.
+- *Tiny graphs:* on ego-Facebook (0.1 ms) serial wins outright, because OpenMP region overhead exceeds the work.
+- Caveat: macOS cannot pin threads to cores. "≤4 threads run on P-cores" is the scheduler's usual behavior for default-QoS work, not something guaranteed.
+
+**Decisions**
+- **BFS sources come from the largest connected component** (degree > 0). This adds to PLAN 8. A roadNet-CA source in a 2-vertex component gave 1 edge / 0.34 ms, and that single source pulled the harmonic-mean GTEPS down to 0.0002. Graph500 implicitly avoids this, since Kronecker graphs keep nearly all non-isolated vertices in the giant component. `--any-component` restores the plain rule.
+- **CSV schema:** the PLAN 8 columns plus a trailing `load1` (1-minute load average), which implements PLAN 8's "record uptime load average". `params` is space-separated with no commas (`dynamic,64` is written as `dynamic/64`).
+- **The scaling sweep uses 16 sources × 3 trials** instead of 64 × 5. At 1 thread on LiveJournal the full protocol would take over an hour; sources are identical across configurations. The baseline table uses the full protocol.
+- `gbench --trace` does one extra untimed, traced run per source, so the timed runs carry no tracing overhead.
+- `cpu_serial` was added to `bfs_cpu.cpp` in Phase 1 and is now joined by the OpenMP variants (no layout change).
+
+**Problems found and fixed**
+- **gbench memory and swap.** The first version kept all 64 reference `dist` arrays (64 × 4n bytes: 786 MB on Orkut, 1.2 GB on LiveJournal). With other apps running, the machine was 4.7 GB into swap, and the Orkut validation slowed to a crawl (>12 min for one variant) while the timed runs stayed normal at ~200 ms. Now each source's reference is computed just before its trials and then dropped. Orkut peak RSS is ~965 MB, and a full cpu_omp run takes 114 s. The Orkut rows were rerun with the fixed binary. The other datasets' rows came from the earlier binary; its timed code path is identical, and the LiveJournal numbers agree with the separate scaling run (138.7 vs 140.8 ms).
+
+**Open issues / notes**
+- System swap was ~4.7 GB used during this phase because of other apps (VS Code, browser). Timed runs looked stable, but closing other apps before the Phase 10 full run would help.
