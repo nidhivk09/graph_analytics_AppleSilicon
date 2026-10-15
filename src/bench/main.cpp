@@ -2,7 +2,9 @@
 //
 //   gbench --graph data/soc-LiveJournal1.bin --algo bfs --variant cpu_omp
 //          [--threads 8] [--schedule static|dynamic,64|guided] [--alpha 15 --beta 18]
+//          [--tg 256]                                (GPU variants: threadgroup size)
 //          [--sources 64 | --source S] [--seed 1] [--any-component] [--warmup 2] [--trials 5]
+//          [--source-warmup 1]
 //          [--validate] [--trace trace.csv] [--csv results/bfs.csv] [--ordering original]
 //   gbench --graph synth:star100k ...         use a generated test graph
 //   gbench --graph X --save-graph out.bin     write the (stored, unsymmetrized) graph
@@ -12,13 +14,25 @@
 // random vertices with degree > 0 in the largest connected component, from a
 // fixed seed (same for every variant);
 // TEPS denominator = undirected edges in the source's component, computed
-// from the cpu_serial result; 2 warm-up runs, then `trials` timed runs per
-// source. Summary: harmonic mean of per-source GTEPS (from the median time)
+// from the cpu_serial result; 2 warm-up runs, then per source: compute the
+// reference, 1 untimed warm-up run (--source-warmup), `trials` timed runs.
+// The per-source warm-up exists because the reference BFS (serial, up to
+// ~0.5 s) leaves the GPU idle and it clocks down: without it the first timed
+// trial of every source ran ~15% slower (Phase 4). Summary: harmonic mean of per-source GTEPS (from the median time)
 // and the median / min time over all runs.
+//
+// GPU variants: the graph is uploaded once (untimed) into shared Metal
+// buffers and every later step, including the CPU reference, uses a CSR view
+// of those buffers. dist is the GPU's shared output buffer (zero copy). The
+// timed region (time_ms_e2e) covers initialization, every level and every
+// per-level host synchronization; time_ms_gpu is the kernel-only part.
+//
+// Compiled as Objective-C++ (Makefile) because GPU variants use Metal types.
 #include "cpu/bfs_cpu.hpp"
 #include "graph/csr.hpp"
 #include "graph/generators.hpp"
 #include "graph/transform.hpp"
+#include "metal/bfs_gpu.hpp"
 #include "util/args.hpp"
 #include "util/rng.hpp"
 #include "util/sysinfo.hpp"
@@ -29,7 +43,9 @@
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <cstring>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <sys/stat.h>
@@ -41,14 +57,26 @@ namespace {
 using BfsFn = std::function<void(const CSR&, uint32_t, uint32_t*, const cpu::BfsOptions&,
                                  std::vector<util::BfsLevel>*)>;
 
-const std::map<std::string, BfsFn>& bfsVariants() {
-    static const std::map<std::string, BfsFn> m = {
-        {"cpu_serial", [](const CSR& g, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
-                          std::vector<util::BfsLevel>*) { cpu::bfsSerial(g, s, d); }},
-        {"cpu_omp", cpu::bfsOmp},
-        {"cpu_do", cpu::bfsDO},
-    };
-    return m;
+const std::vector<std::string> kVariants = {"cpu_serial", "cpu_omp", "cpu_do", "gpu_vertex",
+                                            "gpu_naive"};
+
+bool isGpuVariant(const std::string& v) { return v.rfind("gpu_", 0) == 0; }
+
+// The function that runs `variant`. GPU variants are bound to `gbfs` (the
+// uploaded graph) and ignore the CSR argument.
+BfsFn bfsVariant(const std::string& variant, gpu::GpuBfs* gbfs, const gpu::GpuBfsOptions& gopt) {
+    if (variant == "cpu_serial")
+        return [](const CSR& g, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
+                  std::vector<util::BfsLevel>*) { cpu::bfsSerial(g, s, d); };
+    if (variant == "cpu_omp") return cpu::bfsOmp;
+    if (variant == "cpu_do") return cpu::bfsDO;
+    if (variant == "gpu_vertex")
+        return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
+                            std::vector<util::BfsLevel>* tr) { gbfs->runVertex(s, d, gopt, tr); };
+    if (variant == "gpu_naive")
+        return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
+                            std::vector<util::BfsLevel>* tr) { gbfs->runNaive(s, d, gopt, tr); };
+    return nullptr;
 }
 
 CSR loadGraph(const std::string& spec, std::string& name) {
@@ -117,25 +145,34 @@ bool fileExists(const std::string& p) { struct stat st; return stat(p.c_str(), &
 
 int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset) {
     const std::string variant = args.get("variant", "cpu_serial");
-    auto it = bfsVariants().find(variant);
-    if (it == bfsVariants().end()) {
+    if (std::find(kVariants.begin(), kVariants.end(), variant) == kVariants.end()) {
         std::fprintf(stderr, "unknown BFS variant '%s'. Available:", variant.c_str());
-        for (auto& [k, v] : bfsVariants()) std::fprintf(stderr, " %s", k.c_str());
+        for (auto& k : kVariants) std::fprintf(stderr, " %s", k.c_str());
         std::fprintf(stderr, "\n");
         return 2;
     }
-    const BfsFn& fn = it->second;
+    const bool gpuVariant = isGpuVariant(variant);
 
     cpu::BfsOptions opt;
     opt.threads = (int)args.getInt("threads", 0);
     opt.schedule = cpu::parseSchedule(args.get("schedule", "dynamic,64"));
     opt.alpha = args.getDouble("alpha", 15.0);
     opt.beta = args.getDouble("beta", 18.0);
+    gpu::GpuBfsOptions gopt;
+    gopt.tg = (uint32_t)args.getInt("tg", 256);
 
-    // Transform cost is outside every timed region (PLAN 4.4).
+    // Transform cost (and the GPU upload) is outside every timed region (PLAN 4.4).
     util::Timer prep;
     CSR g = graph::symmetrize(stored);
+    std::unique_ptr<gpu::MetalContext> ctx;
+    std::unique_ptr<gpu::GpuBfs> gbfs;
+    if (gpuVariant) {
+        ctx = std::make_unique<gpu::MetalContext>();
+        gbfs = std::make_unique<gpu::GpuBfs>(*ctx, g);
+        g = gbfs->graph();  // releases the host copy (unless shared with `stored`)
+    }
     double prepMs = prep.ms();
+    const BfsFn fn = bfsVariant(variant, gbfs.get(), gopt);
 
     std::vector<uint32_t> sources;
     if (args.has("source")) sources = {(uint32_t)args.getInt("source", 0)};
@@ -146,6 +183,7 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
         if (s >= g.n) { std::fprintf(stderr, "source %u out of range\n", s); return 2; }
 
     const int warmup = (int)args.getInt("warmup", 2), trials = (int)args.getInt("trials", 5);
+    const int sourceWarmup = (int)args.getInt("source-warmup", 1);
     const bool validate = args.has("validate");
     const std::string ordering = args.get("ordering", "original");
 
@@ -160,14 +198,17 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
         std::snprintf(b, sizeof b, " alpha=%g beta=%g", opt.alpha, opt.beta);
         params += b;
     }
+    if (gpuVariant) params = "tg=" + std::to_string(gopt.tg);
 
     std::printf("%s: n %llu, symmetrized m %llu (%llu undirected edges), prep %.0f ms\n", dataset.c_str(),
                 (unsigned long long)g.n, (unsigned long long)g.m, (unsigned long long)(g.m / 2), prepMs);
     std::printf("bfs %s [%s], %zu source(s), %d warm-up + %d trial(s)%s\n", variant.c_str(), params.c_str(),
                 sources.size(), warmup, trials, validate ? ", validating" : "");
 
-    std::vector<uint32_t> dist(g.n), ref(g.n);
-    for (int w = 0; w < warmup; ++w) fn(g, sources[w % sources.size()], dist.data(), opt, nullptr);
+    // GPU variants write straight into their shared output buffer.
+    std::vector<uint32_t> distHost(gbfs ? 0 : g.n), ref(g.n);
+    uint32_t* dist = gbfs ? gbfs->dist() : distHost.data();
+    for (int w = 0; w < warmup; ++w) fn(g, sources[w % sources.size()], dist, opt, nullptr);
 
     // CSV output: header written when the file is new; rows appended.
     const std::string csvPath = args.get("csv", "");
@@ -182,7 +223,7 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     const std::string ts = util::timestamp(), commit = util::gitCommit(), chip = util::chipName();
     const double load1 = util::loadAverage1();
 
-    std::vector<double> allTimes, perSourceGteps;
+    std::vector<double> allTimes, allGpu, perSourceGteps;
     for (size_t si = 0; si < sources.size(); ++si) {
         // Reference for this source (untimed): validation target and TEPS
         // denominator. Computed per source and not kept: holding all 64
@@ -193,12 +234,14 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
         for (uint64_t v = 0; v < g.n; ++v) if (ref[v] != cpu::kUnreached) degSum += g.degree(v);
         const uint64_t compEdges = degSum / 2;
 
+        for (int w = 0; w < sourceWarmup && trials > 0; ++w) fn(g, sources[si], dist, opt, nullptr);
         std::vector<double> times;
         for (int t = 0; t < trials; ++t) {
             util::Timer timer;
-            fn(g, sources[si], dist.data(), opt, nullptr);
+            fn(g, sources[si], dist, opt, nullptr);
             double ms = timer.ms();
-            if (validate && dist != ref) {
+            double gpuMs = gbfs ? gbfs->lastGpuMs() : -1;
+            if (validate && std::memcmp(dist, ref.data(), g.n * sizeof(uint32_t)) != 0) {
                 for (uint64_t v = 0; v < g.n; ++v)
                     if (dist[v] != ref[v]) {
                         std::fprintf(stderr, "VALIDATION FAILED: %s source %u trial %d: dist[%llu] = %u, expected %u\n",
@@ -210,12 +253,15 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
             double gteps = compEdges / (ms * 1e6);
             times.push_back(ms);
             allTimes.push_back(ms);
+            if (gpuMs >= 0) allGpu.push_back(gpuMs);
             if (csv.is_open()) {
+                char gpuField[32] = "";
+                if (gpuMs >= 0) std::snprintf(gpuField, sizeof gpuField, "%.4f", gpuMs);
                 char row[1024];
-                std::snprintf(row, sizeof row, "%s,%s,%s,%s,%llu,%llu,%s,bfs,%s,%s,%u,%d,%.4f,,%.6f,,%d,%.2f\n",
+                std::snprintf(row, sizeof row, "%s,%s,%s,%s,%llu,%llu,%s,bfs,%s,%s,%u,%d,%.4f,%s,%.6f,,%d,%.2f\n",
                               ts.c_str(), commit.c_str(), chip.c_str(), dataset.c_str(), (unsigned long long)g.n,
                               (unsigned long long)g.m, ordering.c_str(), variant.c_str(), params.c_str(),
-                              sources[si], t, ms, gteps, validate ? 1 : 0, load1);
+                              sources[si], t, ms, gpuField, gteps, validate ? 1 : 0, load1);
                 csv << row;
             }
         }
@@ -227,10 +273,13 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     size_t hcount = 0;
     for (double x : perSourceGteps) if (x > 0) { hsum += 1.0 / x; ++hcount; }
     double hmean = hcount ? hcount / hsum : 0;
-    if (!allTimes.empty())
-        std::printf("time ms: median %.3f, min %.3f | GTEPS harmonic mean %.4f%s\n", median(allTimes),
-                    *std::min_element(allTimes.begin(), allTimes.end()), hmean,
+    if (!allTimes.empty()) {
+        char gpuPart[64] = "";
+        if (!allGpu.empty()) std::snprintf(gpuPart, sizeof gpuPart, " | GPU-only median %.3f", median(allGpu));
+        std::printf("time ms: median %.3f, min %.3f%s | GTEPS harmonic mean %.4f%s\n", median(allTimes),
+                    *std::min_element(allTimes.begin(), allTimes.end()), gpuPart, hmean,
                     validate ? " | validated OK" : "");
+    }
 
     // --trace: one extra untimed, traced run per source.
     const std::string tracePath = args.get("trace", "");
@@ -240,7 +289,7 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
         if (fresh) tr << "dataset,ordering,variant,params,source,level,frontier,edges,direction,device,time_ms\n";
         for (uint32_t s : sources) {
             std::vector<util::BfsLevel> levels;
-            fn(g, s, dist.data(), opt, &levels);
+            fn(g, s, dist, opt, &levels);
             for (auto& L : levels) {
                 char row[512];
                 std::snprintf(row, sizeof row, "%s,%s,%s,%s,%u,%u,%llu,%llu,%c,%c,%.4f\n", dataset.c_str(),
@@ -256,9 +305,9 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     // --dump-dist: raw uint32 distances of the (last) run, for external checks.
     const std::string dumpPath = args.get("dump-dist", "");
     if (!dumpPath.empty()) {
-        fn(g, sources.back(), dist.data(), opt, nullptr);
+        fn(g, sources.back(), dist, opt, nullptr);
         std::ofstream out(dumpPath, std::ios::binary);
-        out.write(reinterpret_cast<const char*>(dist.data()), dist.size() * sizeof(uint32_t));
+        out.write(reinterpret_cast<const char*>(dist), g.n * sizeof(uint32_t));
     }
     return 0;
 }

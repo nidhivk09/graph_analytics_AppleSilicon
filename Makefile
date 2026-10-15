@@ -23,7 +23,7 @@ LDFLAGS  := $(MACOS_MIN) -L$(LIBOMP)/lib
 LDLIBS   := -lomp -framework Metal -framework Foundation -lz
 
 # Code shared by every executable. Grows phase by phase.
-LIB_SRCS := src/metal/context.mm \
+LIB_SRCS := src/metal/context.mm src/metal/primitives.mm src/metal/bfs_gpu.mm \
             src/graph/csr.cpp src/graph/snap.cpp src/graph/transform.cpp \
             src/graph/generators.cpp src/cpu/bfs_cpu.cpp
 LIB_OBJS := $(patsubst src/%,$(OBJDIR)/%.o,$(LIB_SRCS))
@@ -55,6 +55,11 @@ $(OBJDIR)/%.cpp.o: src/%.cpp
 $(OBJDIR)/%.mm.o: src/%.mm
 	@mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) $(OBJCXXFLAGS) -c $< -o $@
+
+# gbench uses Metal types for the GPU variants: compile it as Objective-C++.
+$(OBJDIR)/bench/main.cpp.o: src/bench/main.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) $(OBJCXXFLAGS) -x objective-c++ -c $< -o $@
 
 $(OBJDIR)/tests/%.cpp.o: tests/%.cpp
 	@mkdir -p $(dir $@)

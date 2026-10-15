@@ -4,9 +4,9 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 3 complete** (2026-10-15). Waiting for approval to start Phase 4.
-- Next: Phase 4 (Metal infrastructure, primitives, `gpu_vertex` / `gpu_naive` BFS).
-- **Reference numbers** (Phase 3): GPU sequential DRAM bandwidth **~95 GB/s**;
+- **Phase 4 complete** (2026-10-15). Correctness is final, but the **timings are provisional**: they were measured on battery with Low Power Mode on. Rerun `scripts/bench_bfs.sh` on AC with Low Power Mode off, then replace the Phase 4 table, before using these numbers in comparisons.
+- Next: Phase 5 (`gpu_binned`, `gpu_edge` load-balanced BFS).
+- **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
   dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
   tables **~0.28 Greads/s GPU, ~0.32 Greads/s CPU** vs ~12 Greads/s sequential.
@@ -243,3 +243,61 @@ Serial: roadNet-CA 37.9 ms, LiveJournal 424.7 ms.
 
 **Open issues / notes**
 - System swap was still ~4.6 GB used, with other apps open. Results were stable across repeats, but the Phase 10 rerun should be done with other apps closed.
+
+### 2026-10-15 · Phase 4: Metal infrastructure + first GPU BFS
+
+**Built**
+- `src/shaders/common.h`: `tg_sum` / `tg_max` threadgroup reductions (simd_sum, then a cross-simdgroup step), shared by every kernel file.
+- `primitives.metal` + `src/metal/primitives.{hpp,mm}` (`gpu::Primitives`). Each operation *encodes* into the caller's compute encoder, so later phases can chain primitives with BFS kernels in one command buffer:
+  - `fill`
+  - `reduceSum` / `reduceMax`: two fixed passes, ≤1024 partials, then one 1024-thread group. Deterministic, no atomics.
+  - `scanExclusive`: three-phase. Blocks of 1024 (256 threads × 4 items, simd_prefix_exclusive_sum), recursive scan of block sums, add-back. Works in place, and optionally writes the grand total.
+  - `queueToBitmap` (atomic_fetch_or) / `bitmapToQueue` (ballot-style aggregated append: one atomic per simdgroup).
+  - Scratch buffers are pooled, because allocation inside timed loops is too slow.
+- `bfs.metal` + `src/metal/bfs_gpu.{hpp,mm}` (`gpu::GpuBfs`):
+  - `gpu_vertex`: thread per vertex every level, with plain racy-but-benign dist writes (every writer stores the same level+1).
+  - `gpu_naive`: thread per frontier vertex. It claims neighbors with a CAS on dist (with a **retry loop**: MSL only has the *weak* CAS, which may fail spuriously and would otherwise silently drop a vertex) and appends with one atomic per claim.
+  - Both kernels aggregate level statistics per simdgroup (frontier size, edges examined, discovered): one atomic per 32 threads.
+  - The host loop is one command buffer per level, with commit + wait, then a read of the stats from the shared buffer. Initialization rides in level 0's command buffer.
+- **Zero-copy graph:** `GpuBfs` copies the CSR once into shared buffers and exposes a CSR *view* of them (`graph()`). gbench then drops its host copy and runs even the CPU reference on the GPU's bytes, so the graph is resident once. GPU runs write into a shared `dist` buffer that gbench validates in place, with no copy-out.
+- gbench: `gpu_vertex` / `gpu_naive`, `--tg` (threadgroup size), `time_ms_gpu` column (sum of GPUStart→End over the run's command buffers), and `--source-warmup` (below). It is now compiled as Objective-C++ (still `main.cpp`, via a Makefile rule).
+- `scripts/bench_bfs.sh CSV VARIANTS...`: every dataset with the full protocol and `--validate`. Optional `TRACE=` saves per-level traces for LiveJournal and roadNet-CA (4 sources).
+- **Tests: 18/18** (5 new).
+  - Primitives are tested at sizes 0, 1, 2, 31–33, 255–257, 1023–1025, 4097, 100003, 2^20 ± 1, and 3000017 (one-, two- and three-level scans), plus in-place scan, fill with offset, and the queue→bitmap→queue round trip.
+  - Both GPU BFS variants run on every synthetic graph with 7 sources (including isolated vertices and the max-degree hub) at tg 32/256/1024. They must match exactly, and the trace must count every reached vertex and every edge exactly once.
+  - Mutation check: deliberately breaking the scan (off by one at one element) or replacing the CAS claim with a racy load/store makes 3 tests fail, so the tests do catch these bugs.
+
+**Validation:** both variants match `cpu_serial` exactly on all six datasets × 64 sources × every trial (`--validate`). Peak RSS for the whole run is 1.94 GB (Orkut).
+
+**First GPU numbers: PROVISIONAL (battery, Low Power Mode on)** (`results/bfs_gpu.csv`; 64 sources × 5 trials; median ms end-to-end / kernel-only; GTEPS = harmonic mean)
+
+| dataset | gpu_vertex e2e / GPU | GTEPS | gpu_naive e2e / GPU | GTEPS | best CPU (Phase 2, AC) |
+|---|---|---|---|---|---|
+| ego-Facebook | 2.8 / 1.4 | 0.03 | 4.8 / 3.2 | 0.02 | serial 0.10 ms |
+| web-Google | 13.7 / 10.7 | 0.29 | 18.2 / 14.9 | 0.23 | do 6.9 ms |
+| roadNet-CA | 346 / 195 | 0.008 | 135 / 16.6 | 0.020 | serial 37.5 ms |
+| soc-Pokec | 19.6 / 17.1 | 1.09 | 29.6 / 27.2 | 0.73 | do 8.8 ms |
+| soc-LiveJournal1 | 47.5 / 42.2 | 0.74 | 68.0 / 65.0 | 0.61 | do 22.4 ms (omp 139) |
+| com-Orkut | 164 / 136 | 0.71 | 185 / 180 | 0.64 | do 28.0 ms (omp 222) |
+
+How unreliable are these? Measured right after the run on the same battery/LPM state: `cpu_do` LiveJournal took 28.4 ms (vs 22.4 on AC, +27%), the launch round trip 127 µs (vs 111, +14%), and the one-encoder dependent dispatch 1.7 µs (vs 0.6). GPU streaming bandwidth was unchanged (97 GB/s). The run was also noisy: Orkut `gpu_vertex` gave 102 ms median in the first full run and 164 ms in the second (min 71 ms both times). **Rerun on AC before drawing quantitative conclusions.** The qualitative picture below shows up in both runs and in the traces.
+
+**Observations (qualitative; hold under both runs)**
+- **Both simple GPU variants beat `cpu_omp` on the social graphs** (LiveJournal ~1.5–3×), but **lose clearly to `cpu_do`**. Top-down BFS does ~m edge checks regardless of device; direction optimization skips most of them. `gpu_do` (Phase 6) is the fair comparison.
+- **roadNet-CA is the sync-bound case, as Phase 3 predicted.** `gpu_naive` runs 608 levels; the GPU works for only 16.6 ms, but end to end takes 135 ms, i.e. ~0.19 ms per level, of which ~0.03 ms is kernel. That is the ~111–127 µs round trip plus per-level command-buffer setup. `gpu_vertex` is worse still (195 ms of kernel time), because it launches all 2M vertex threads on every one of the 608 levels just to find the few frontier vertices.
+- **`gpu_naive` is slower than `gpu_vertex` on every social graph.** The LiveJournal trace shows where: the big levels 3–5 (2.3M–39M edges) take 13 / 18 / 27 ms with `gpu_naive` vs 5.7 / 12 / 9.7 ms with `gpu_vertex`. There are two causes:
+  - Load imbalance: one thread walks a whole hub adjacency list (max degree ~20K) while its simdgroup waits.
+  - One global atomic per discovered vertex on a single queue-tail counter (2.4M at level 5).
+
+  `gpu_vertex` avoids both: its threads are mostly idle filters, and it has no queue. On tiny frontiers (late levels), `gpu_naive` wins (0.15–0.2 vs 0.43 ms per level), because it launches only `size` threads. Phase 5 (`gpu_binned` / `gpu_edge`) targets the imbalance and contention.
+- **GPU clock wake-up:** in traces, level 0 of the first source took 16–24 ms (vs ~0.4 ms for the other sources) after the GPU sat idle during the CPU reference computation.
+
+**Decisions**
+- **`--source-warmup 1` (default, all variants):** one untimed run per source after computing its reference and before its timed trials. Without it, trial 0 of every source was ~15% slower, because the serial reference (up to ~0.5 s) let the GPU clock down; with it, LiveJournal trial medians are flat (31.3–32.0 ms). This adds to PLAN 8's "2 warm-up runs". The Phase 2 CPU baseline predates it; Phase 10 reruns everything with it.
+- **GPU timed region = everything per run:** init kernel, every level, every host sync, and reading the stats. Upload and graph transforms are excluded (PLAN 4.4). `time_ms_gpu` is reported next to it.
+- **The graph is uploaded by copy** (`newBufferWithBytes`). Then the host copy is dropped, except for undirected inputs, where the mmap'd stored graph stays mapped in gbench. Its pages are clean and file-backed, so the OS can reclaim them; peak RSS is 1.94 GB. `newBufferWithBytesNoCopy` on the mmap is still not used, because the 32-byte header leaves the arrays non-page-aligned. Upload is outside timing, so this only matters for memory.
+- `gpu_vertex` uses plain loads/stores on dist (a benign race). `STAT_FOUND` can overcount there, so it serves only as the "anything discovered?" flag. Exact frontier sizes come from the next level's frontier count.
+
+**Open issues / notes**
+- **Rerun `scripts/bench_bfs.sh results/bfs_gpu.csv gpu_vertex gpu_naive` on AC power with Low Power Mode off** (~15 min) and replace the provisional table.
+- Swap was still ~4.6 GB used, with other apps open.

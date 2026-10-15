@@ -44,7 +44,14 @@ set `GGPU_SHADER_DIR` to that directory.
 
 BFS variants so far: `cpu_serial` (reference), `cpu_omp` (level-synchronous,
 `--schedule static|dynamic,64|guided`), `cpu_do` (direction-optimizing,
-`--alpha 15 --beta 18`).
+`--alpha 15 --beta 18`), `gpu_vertex` (thread per vertex every level) and
+`gpu_naive` (thread per frontier vertex, CAS claim, atomic queue append);
+GPU variants take `--tg` (threadgroup size, default 256) and also report
+kernel-only time (`time_ms_gpu`).
+
+```sh
+./scripts/bench_bfs.sh results/bfs_gpu.csv gpu_vertex gpu_naive   # all datasets, validated
+```
 
 ## Layout
 

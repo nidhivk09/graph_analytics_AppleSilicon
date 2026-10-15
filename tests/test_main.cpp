@@ -6,7 +6,10 @@
 #include "graph/generators.hpp"
 #include "graph/snap.hpp"
 #include "graph/transform.hpp"
+#include "metal/bfs_gpu.hpp"
 #include "metal/context.hpp"
+#include "metal/primitives.hpp"
+#include "util/rng.hpp"
 
 #include <cstdlib>
 #include <unistd.h>
@@ -15,6 +18,7 @@
 #include <omp.h>
 #include <cstdio>
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -337,6 +341,158 @@ TEST(cpu_do_matches_serial_forced_directions) {
                     if (m.a < 1e-6) CHECK(!sawBU);
                 }
         }
+    }
+}
+
+// ---------------------------------------------------------------- Phase 4
+
+// Sizes around every boundary the kernels care about: empty, single element,
+// threadgroup (256), scan block (1024), two-level and three-level scans
+// (1024^2 = 1048576), and a large odd size.
+static const std::vector<size_t> kPrimSizes = {0, 1, 2, 31, 32, 33, 255, 256, 257, 1023, 1024, 1025,
+                                               4097, 100003, 1048575, 1048576, 1048577, 3000017};
+
+static std::vector<uint32_t> randomVec(size_t n, uint64_t seed, uint32_t bound) {
+    util::Rng r(seed);
+    std::vector<uint32_t> v(n);
+    for (auto& x : v) x = (uint32_t)r.below(bound);
+    return v;
+}
+
+static gpu::Primitives& prims() { static gpu::Primitives p(ctx()); return p; }
+
+TEST(primitives_reduce_sum_max) {
+    for (size_t n : kPrimSizes) {
+        // Full 32-bit range: sums wrap, and both sides wrap identically.
+        auto v = randomVec(n, 100 + n, 0xFFFFFFFFu);
+        uint32_t sum = 0, mx = 0;
+        for (uint32_t x : v) { sum += x; mx = std::max(mx, x); }
+        if (prims().runReduceSum(v) != sum || prims().runReduceMax(v) != mx)
+            std::printf("    size %zu\n", n);
+        CHECK(prims().runReduceSum(v) == sum);
+        CHECK(prims().runReduceMax(v) == mx);
+    }
+}
+
+TEST(primitives_exclusive_scan) {
+    for (size_t n : kPrimSizes) {
+        auto v = randomVec(n, 200 + n, 1000);
+        std::vector<uint32_t> want(n);
+        uint32_t run = 0;
+        for (size_t i = 0; i < n; ++i) { want[i] = run; run += v[i]; }
+        uint32_t total = 0;
+        auto got = prims().runScan(v, &total);
+        if (got != want || total != run) std::printf("    size %zu\n", n);
+        CHECK(got == want);
+        CHECK(total == run);
+    }
+}
+
+TEST(primitives_scan_in_place_and_fill) {
+    const size_t n = 1048577;
+    auto v = randomVec(n, 7, 50);
+    id<MTLBuffer> buf = ctx().buffer(v.data(), n * 4), tot = ctx().buffer(4);
+    id<MTLCommandBuffer> cb = [ctx().queue() commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    prims().scanExclusive(enc, buf, buf, n, tot);  // in place
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    const uint32_t* o = static_cast<const uint32_t*>(buf.contents);
+    uint32_t run = 0;
+    for (size_t i = 0; i < n; ++i) { CHECK(o[i] == run); run += v[i]; }
+    CHECK(*static_cast<uint32_t*>(tot.contents) == run);
+
+    for (size_t m : {(size_t)0, (size_t)1, (size_t)257, (size_t)100003}) {
+        id<MTLBuffer> b = ctx().buffer((m + 2) * 4);
+        uint32_t* p = static_cast<uint32_t*>(b.contents);
+        for (size_t i = 0; i < m + 2; ++i) p[i] = 1;
+        cb = [ctx().queue() commandBuffer];
+        enc = [cb computeCommandEncoder];
+        prims().fill(enc, b, 0xABCD1234u, m, 4);  // offset 1 element: p[0] and p[m+1] untouched
+        [enc endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+        CHECK(p[0] == 1 && p[m + 1] == 1);
+        for (size_t i = 1; i <= m; ++i) CHECK(p[i] == 0xABCD1234u);
+    }
+}
+
+TEST(primitives_queue_bitmap_roundtrip) {
+    for (size_t n : {(size_t)0, (size_t)1, (size_t)31, (size_t)32, (size_t)33, (size_t)1000, (size_t)100003}) {
+        // Random subset of 0..n-1 (about a third), as an unordered queue.
+        util::Rng r(300 + n);
+        std::vector<uint32_t> queue;
+        for (uint32_t v = 0; v < n; ++v) if (r.below(3) == 0) queue.push_back(v);
+        for (size_t i = queue.size(); i > 1; --i) std::swap(queue[i - 1], queue[r.below(i)]);
+
+        size_t words = (n + 31) / 32;
+        id<MTLBuffer> q = ctx().buffer(queue.data(), queue.size() * 4);
+        id<MTLBuffer> bm = ctx().buffer(words * 4), q2 = ctx().buffer(n * 4), sz = ctx().buffer(4);
+        std::memset(bm.contents, 0xFF, words * 4);  // must be cleared by queueToBitmap
+        id<MTLCommandBuffer> cb = [ctx().queue() commandBuffer];
+        id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+        prims().queueToBitmap(enc, q, queue.size(), bm, n);
+        prims().bitmapToQueue(enc, bm, n, q2, sz);
+        [enc endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+
+        const uint32_t* bits = static_cast<const uint32_t*>(bm.contents);
+        std::vector<uint8_t> in(n, 0);
+        for (uint32_t v : queue) in[v] = 1;
+        for (uint32_t v = 0; v < n; ++v) CHECK(((bits[v >> 5] >> (v & 31)) & 1u) == in[v]);
+        if (n % 32) CHECK((bits[words - 1] >> (n % 32)) == 0);  // no bits past n
+
+        uint32_t count = *static_cast<uint32_t*>(sz.contents);
+        CHECK(count == queue.size());
+        const uint32_t* o = static_cast<const uint32_t*>(q2.contents);
+        std::vector<uint32_t> got(o, o + count), want = queue;
+        std::sort(got.begin(), got.end());
+        std::sort(want.begin(), want.end());
+        CHECK(got == want);
+    }
+}
+
+// Every GPU BFS variant, every synthetic graph, several sources (including
+// isolated vertices), plus the vertex with the highest degree (star hub):
+// dist must equal cpu_serial exactly, and the trace must account for every
+// reached vertex exactly once.
+TEST(gpu_bfs_matches_serial_on_synthetic_graphs) {
+    for (auto& [name, stored] : graph::gen::suite()) {
+        CSR g = graph::symmetrize(stored);
+        gpu::GpuBfs bfs(ctx(), g);
+        auto sources = testSources(g);
+        uint32_t hub = 0;
+        for (uint32_t v = 0; v < g.n; ++v) if (g.degree(v) > g.degree(hub)) hub = v;
+        sources.push_back(hub);
+        for (uint32_t src : sources) {
+            auto ref = cpu::bfsSerial(g, src);
+            for (int variant = 0; variant < 2; ++variant)
+                for (uint32_t tg : {32u, 256u, 1024u}) {
+                    gpu::GpuBfsOptions o;
+                    o.tg = tg;
+                    std::vector<util::BfsLevel> tr;
+                    std::vector<uint32_t> d(g.n, 12345);
+                    if (variant == 0) bfs.runVertex(src, d.data(), o, &tr);
+                    else bfs.runNaive(src, d.data(), o, &tr);
+                    if (d != ref)
+                        std::printf("    %s src %u %s tg %u\n", name.c_str(), src,
+                                    variant ? "gpu_naive" : "gpu_vertex", tg);
+                    CHECK(d == ref);
+                    uint64_t sum = 0, edges = 0, want = 0;
+                    for (auto& L : tr) { sum += L.frontier; edges += L.edges; }
+                    for (uint32_t v = 0; v < g.n; ++v) if (ref[v] != cpu::kUnreached) want += g.degree(v);
+                    CHECK(sum == reachedCount(ref));
+                    CHECK(edges == want);  // top-down examines every reached vertex's list once
+                }
+        }
+        // The CSR view aliases the GPU buffers and matches the input exactly.
+        CHECK(graph::equal(bfs.graph(), g));
+        // Zero-copy path: out == dist().
+        bfs.runNaive(sources[0], bfs.dist(), gpu::GpuBfsOptions{});
+        auto ref = cpu::bfsSerial(g, sources[0]);
+        CHECK(std::memcmp(bfs.dist(), ref.data(), g.n * 4) == 0);
     }
 }
 
