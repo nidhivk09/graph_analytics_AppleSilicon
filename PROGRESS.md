@@ -4,8 +4,12 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 2 complete** (2026-10-14). Waiting for approval to start Phase 3.
-- Next: Phase 3 (gmicro --bandwidth / --launch / --random microbenchmarks).
+- **Phase 3 complete** (2026-10-15). Waiting for approval to start Phase 4.
+- Next: Phase 4 (Metal infrastructure, primitives, `gpu_vertex` / `gpu_naive` BFS).
+- **Reference numbers** (Phase 3): GPU sequential DRAM bandwidth **~95 GB/s**;
+  CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
+  dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
+  tables **~0.28 Greads/s GPU, ~0.32 Greads/s CPU** vs ~12 Greads/s sequential.
 - All six datasets are in `data/*.bin` (1.3 GB). Rebuild them with `scripts/download.sh`.
 
 ## Measured machine facts (Phase 0)
@@ -167,3 +171,75 @@ Serial: roadNet-CA 37.9 ms, LiveJournal 424.7 ms.
 
 **Open issues / notes**
 - System swap was ~4.7 GB used during this phase because of other apps (VS Code, browser). Timed runs looked stable, but closing other apps before the Phase 10 full run would help.
+
+### 2026-10-15 · Phase 3: microbenchmarks
+
+**Built**
+- `gmicro --bandwidth`: sequential read, write, and copy kernels (`bw_read`, `bw_write`, `bw_copy` in `micro.metal`) plus OpenMP equivalents over the **same shared buffers**, for sizes 1 MB → 2 GB. Output: `results/micro_bandwidth.csv`.
+- `gmicro --launch`: 1000 empty dispatches in four modes (below). Output: `results/micro_launch.csv`.
+- `gmicro --random`: gathers `table[idx[i]]` with sequential and random `idx`, GPU and CPU, for table sizes 1 MB → 2 GB with a fixed 32M reads (128 MB idx). Output: `results/micro_random.csv`.
+- `scripts/micro.sh` runs all three. Peak RSS is 2.16 GB for bandwidth and 2.29 GB for random, under the 3 GB limit.
+- **Every run is self-checking:** data is `uint`, so sums wrap mod 2^32 and are exact in any order. The GPU read sum, the GPU/CPU gather sums (against a serial reference), the write pattern, and copy (memcmp) are all verified. All passed.
+
+**Sequential bandwidth** (median GB/s of 5 trials; copy counts 2×size of traffic)
+
+| size | GPU read | GPU write | GPU copy | CPU read | CPU write | CPU copy |
+|---|---|---|---|---|---|---|
+| 1 MB | 292 | 380 | 414 | 25 | 41 | 73 |
+| 2 MB | 323 | 386 | 199 | 36 | 43 | 95 |
+| 4 MB | 129 | 131 | 95 | 55 | 67 | 98 |
+| 16 MB | 105 | 122 | 93 | 79 | 69 | 90 |
+| 64 MB | 102 | 101 | 91 | 61 | 65 | 74 |
+| 256 MB | 99 | 92 | 87 | 61 | 65 | 75 |
+| 1 GB | 95 | 96 | 89 | 63 | 64 | 72 |
+| 2 GB | 94 | 97 | – | 62 | 64 | – |
+
+- **GPU DRAM bandwidth ≈ 95 GB/s** (read, ≥256 MB), which is ~93% of the 102.4 GB/s theoretical for LPDDR5-6400 × 128 bit. This is the reference "peak sequential bandwidth" for later phases.
+- **Cache regime:** at ≤2 MB the buffer stays in the GPU's on-chip caches across the repeated dispatches (290–410 GB/s). From 4–16 MB, 105–130 GB/s is the system-level cache (8 MB on M2) partly helping; at ≥32 MB it's DRAM. The ≤2 MB numbers jump around between runs (e.g. 2 MB copy 175–199) because these are tiny, cache-resident transfers. Treat them as order-of-magnitude only.
+- **CPU (8 threads):** ~61 GB/s read, ~65 write, ~74 copy at DRAM sizes. One core reaches 29 GB/s read and 66 GB/s write, and 4 threads already saturate read (61.4 GB/s at 256 MB). The CPU side cannot use the full DRAM bandwidth; the GPU gets ~1.55× more.
+- CPU numbers at 1–2 MB are low because each rep is one OpenMP parallel region: the ~20 µs fork/join plus barrier (see Phase 2) is comparable to the transfer itself.
+
+**Kernel launch cost** (1000 empty dispatches, 1 threadgroup of 32, median of 5 trials)
+
+| mode | wall µs / dispatch | GPU µs / dispatch | notes |
+|---|---|---|---|
+| `sync_each` (new command buffer, commit + `waitUntilCompleted` each) | 113.4 | 6.7 | median 111 µs, p90 117 µs per round trip |
+| `async_each` (new command buffer each, wait on last) | 29.1 | 28.9 | submission throughput, no round trip |
+| `encoder_each` (one command buffer, new encoder each) | 1.1 | 0.6 | |
+| `one_encoder` (one command buffer, one encoder) | 0.8 | 0.6 | dependent dispatches, serial dispatch type |
+
+- **A host round trip costs ~111 µs**, and only ~7 µs of that is GPU-side. The rest is commit → schedule → completion → wake-up of the waiting CPU thread. A level-synchronous GPU BFS that reads the frontier size on the host every level pays this per level. On roadNet-CA (~700 levels) that is ~78 ms of pure overhead, about 2× the *whole* serial CPU BFS (37.5 ms). Phase 7's hybrid targets exactly this.
+- Dependent dispatches inside one encoder cost only ~0.6–0.8 µs each, ~140× cheaper. Keeping consecutive levels on the GPU without host readback (indirect dispatch, the Phase 7 stretch goal) is therefore very attractive.
+- Even without waiting, each separate command buffer costs ~29 µs: batch work into as few command buffers as possible.
+
+**Random gather vs sequential** (median Greads/s; ratio = sequential / random)
+
+| table | GPU seq | GPU rand | ratio | CPU seq | CPU rand | ratio |
+|---|---|---|---|---|---|---|
+| 1 MB | 19.2 | 9.03 | 2.1× | 12.7 | 5.16 | 2.5× |
+| 4 MB | 16.2 | 2.69 | 6.0× | 11.6 | 5.28 | 2.2× |
+| 16 MB | 16.8 | 1.09 | 15.4× | 10.4 | 1.58 | 6.6× |
+| 64 MB | 16.2 | 0.54 | 30× | 8.5 | 0.39 | 22× |
+| 256 MB | 12.2 | 0.31 | 39× | 7.0 | 0.34 | 21× |
+| 2 GB | 9.8 | 0.27 | 36× | 6.0 | 0.32 | 19× |
+
+- **Random 4-byte gathers from DRAM-sized tables run at ~0.27–0.37 Greads/s on the GPU**, about 1.1–1.5 GB/s of useful payload and 35–45× slower than sequential. Every read pulls a whole cache line, so the payload fraction is tiny. This is the graph access pattern (`dist[col_idx[e]]`, `contrib[col_idx[e]]`), and it, not the 95 GB/s, is what bounds BFS and PageRank on large graphs.
+- GPU sequential gather at DRAM sizes is 12 Greads/s × 8 B (idx + value) ≈ 97 GB/s, i.e. DRAM-bound as expected.
+- **Surprise: for DRAM-sized tables the 8-thread CPU gathers randomly about as fast as the GPU** (0.32–0.35 vs 0.27–0.37 Greads/s). The GPU's advantage is in streaming (≈1.6×) and in cache-resident random access (≤16 MB: up to 1.8×), not in DRAM latency-bound access. Increasing parallelism didn't help: grids of 64K, 1M, and 16M threads give the same ~0.30 Greads/s at 256 MB.
+- The CPU's random-gather cliff falls between 8 MB and 32 MB (4.5 → 0.5 Greads/s), consistent with the 16 MB P-cluster L2 plus 8 MB SLC. The GPU's falls earlier, between 2 MB and 4 MB.
+- **Unexplained, reproducible:** GPU random gather is non-monotonic between 8 and 32 MB. 32 MB (1.6–1.9 Greads/s) beats 8 MB and 16 MB (0.75–1.6), in every run. A buffer-mapping effect is **ruled out**: allocating 32 or 256 MB but using only 8 MB (`--min-alloc-mb`) gives the same slow numbers. I'm noting it and not chasing it further, since it doesn't affect the DRAM-regime reference numbers.
+
+**Implications recorded for later phases**
+- **Phase 7 prediction (preliminary):** a GPU level costs ≥ ~111 µs round trip; a CPU level costs ~20 µs barrier + work. With CPU random gathers at ~0.3–1.5 Greads/s (DRAM to cache-resident), the CPU finishes a level in the ~90 µs difference if it touches fewer than roughly **3×10⁴ – 10⁵ edges**. So `T` should land around 10⁴·⁵–10⁵ edges. To be checked against the sweep.
+- **Phase 8:** pull PageRank streams `row_ptr` + `col_idx` at near-sequential rates but gathers `contrib` randomly. Report effective bandwidth against both 95 GB/s (sequential) and ~0.3 Greads/s (random), as PLAN says. Reordering (Phase 9) should help by moving gathers toward the cache-resident regime.
+
+**Decisions**
+- **"Size" means bytes per buffer.** Copy needs two buffers, so it stops at 1 GB per buffer (2 GB resident) to respect the 3 GB process limit (`--copy-max-mb`). Read and write go to 2 GB.
+- **Batched timing:** each trial encodes enough back-to-back dispatches in one command buffer to move ~1 GB (`--target-mb`), and GPU time comes from `GPUStartTime`/`GPUEndTime`. Without batching, small sizes would measure the 111 µs round trip instead of bandwidth.
+- **Grid-stride kernels with a 16M-thread grid cap** (`--grid`). A 64K grid was fine for read but **halved copy bandwidth** (41 vs ~90 GB/s at 512 MB, consistent over repeats), and ≥1M was needed for write and copy. 16M means 1–8 uint4 elements per thread and was best or tied everywhere.
+- **Time-based warm-up** (repeat until ≥200 ms, at least once) for every GPU and CPU measurement. With a single warm-up run, small GPU measurements ramped up to 2× across the timed trials (GPU clock ramp-up). After the fix, trials agree within ~5%.
+- **CPU read uses 16 independent accumulators.** A plain `s += a[i]` reduction compiled to scalar adds and capped one core at 11.8 GB/s (compute-bound), which made the CPU baseline unfair. With 16 lanes: 29 GB/s per core, 61 GB/s at 8 threads.
+- The read kernels reduce to one value per threadgroup (simd_sum + threadgroup reduction) instead of one per thread. This keeps loads live with negligible extra write traffic.
+
+**Open issues / notes**
+- System swap was still ~4.6 GB used, with other apps open. Results were stable across repeats, but the Phase 10 rerun should be done with other apps closed.

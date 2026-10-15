@@ -22,6 +22,7 @@ make                       # builds build/{gconvert,gstats,gbench,gmicro,gtest}
 make test                  # unit tests
 ./build/gmicro --hello     # Metal smoke test + device properties
 ./build/gmicro --omp       # OpenMP smoke test
+./scripts/micro.sh         # Phase 3 microbenchmarks: --launch, --bandwidth, --random
 ./scripts/setup_python.sh  # analysis venv (numpy pandas matplotlib networkx scipy)
 ```
 
