@@ -3,34 +3,44 @@ synth:path1000,bfs,0,1000,1000,0,OK
 synth:path1000,bfs,1,1000,1000,0,OK
 synth:path1000,bfs,944,1000,1000,0,OK
 synth:path1000,bfs,625,1000,1000,0,OK
+synth:path1000,pr,,1000,,L1=2.168e-19 rel=1.688e-16,OK
 synth:star100k,bfs,0,100001,100001,0,OK
 synth:star100k,bfs,94491,100001,100001,0,OK
 synth:star100k,bfs,62510,100001,100001,0,OK
+synth:star100k,pr,,100001,,L1=8.470e-17 rel=1.567e-16,OK
 synth:complete200,bfs,0,200,200,0,OK
 synth:complete200,bfs,188,200,200,0,OK
 synth:complete200,bfs,125,200,200,0,OK
+synth:complete200,pr,,200,,L1=0.000e+00 rel=0.000e+00,OK
 synth:two_components,bfs,0,400,300,0,OK
 synth:two_components,bfs,311,400,100,0,OK
 synth:two_components,bfs,377,400,100,0,OK
 synth:two_components,bfs,250,400,300,0,OK
+synth:two_components,pr,,400,,L1=2.951e-16 rel=7.807e-16,OK
 synth:empty1000,bfs,0,1000,1,0,OK
 synth:empty1000,bfs,944,1000,1,0,OK
 synth:empty1000,bfs,625,1000,1,0,OK
+synth:empty1000,pr,,1000,,L1=0.000e+00 rel=0.000e+00,OK
 synth:grid100x100,bfs,0,10000,10000,0,OK
 synth:grid100x100,bfs,101,10000,10000,0,OK
 synth:grid100x100,bfs,9449,10000,10000,0,OK
 synth:grid100x100,bfs,6250,10000,10000,0,OK
+synth:grid100x100,pr,,10000,,L1=2.220e-16 rel=5.255e-16,OK
 synth:rmat12,bfs,0,4096,3352,0,OK
 synth:rmat12,bfs,3870,4096,3352,0,OK
 synth:rmat12,bfs,2560,4096,3352,0,OK
+synth:rmat12,pr,,4096,,L1=8.055e-16 rel=1.876e-15,OK
 synth:rmat12_directed,bfs,0,4096,3348,0,OK
 synth:rmat12_directed,bfs,3870,4096,1,0,OK
 synth:rmat12_directed,bfs,2560,4096,3348,0,OK
+synth:rmat12_directed,pr,,4096,,L1=1.522e-15 rel=2.871e-15,OK
 data/ego-Facebook.bin,bfs,0,4039,4039,0,OK
 data/ego-Facebook.bin,bfs,107,4039,4039,0,OK
 data/ego-Facebook.bin,bfs,3816,4039,4039,0,OK
 data/ego-Facebook.bin,bfs,2524,4039,4039,0,OK
+data/ego-Facebook.bin,pr,,4039,,L1=9.693e-17 rel=5.593e-16,OK
 data/web-Google.bin,bfs,0,875713,855802,0,OK
 data/web-Google.bin,bfs,481807,875713,855802,0,OK
 data/web-Google.bin,bfs,827465,875713,855802,0,OK
 data/web-Google.bin,bfs,547404,875713,855802,0,OK
+data/web-Google.bin,pr,,875713,,L1=3.238e-15 rel=8.675e-15,OK

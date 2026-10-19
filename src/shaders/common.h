@@ -33,3 +33,14 @@ static inline uint tg_max(uint v, threadgroup uint* scratch, uint sid, uint lane
     threadgroup_barrier(mem_flags::mem_threadgroup);
     return w;
 }
+
+static inline float tg_sum_f(float v, threadgroup float* scratch, uint sid, uint lane, uint nsg)
+{
+    v = simd_sum(v);
+    if (lane == 0) scratch[sid] = v;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float w = lane < nsg ? scratch[lane] : 0.0f;
+    w = simd_sum(w);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    return w;
+}

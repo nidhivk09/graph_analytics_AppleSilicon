@@ -4,8 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 7 complete** (2026-10-19). Waiting for approval to start Phase 8.
-- Next: Phase 8 (PageRank: CPU reference + four GPU variants).
+- **Phase 8 complete** (2026-10-19). Waiting for approval to start Phase 9.
+- Next: Phase 9 (vertex reordering: random, degree, RCM; locality metrics).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
   dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
@@ -526,3 +526,80 @@ The three bottom-up levels examine **17M adjacency entries instead of 82M** (ear
 **Open issues / notes**
 - On LiveJournal, CPU level 2 (1755 edges, serial) took 0.28 ms in one trace, vs a few µs for comparable levels. Probably a one-off (first touch of thread-local buffers or a cold cache); not investigated.
 - Swap was ~7 GB used, with other apps open; close apps before Phase 10.
+
+### 2026-10-19 · Phase 8: PageRank
+
+**Built**
+- `src/cpu/pagerank_cpu.{hpp,cpp}`: `cpu_serial` and `cpu_omp` (pull, double, dynamic,256 schedule), with `--iters` and `--tol` modes. Also `checkRanks` (the PLAN.md 7 criteria) and `outDegrees`.
+- `src/shaders/pagerank.metal` + `src/metal/pagerank_gpu.{hpp,mm}` (`gpu::GpuPageRank`). Each iteration is three steps:
+  1. `pr_contrib` plus a two-pass dangling-sum reduction
+  2. the main kernel
+  3. `pr_diff` plus a reduction, in tol mode only
+
+  The main kernels:
+  - **`gpu_push`:** thread per source; `atomic_float` adds into `acc`; finalize computes r_new and re-zeroes `acc`.
+  - **`gpu_pull_scalar`:** thread per vertex over in-edges.
+  - **`gpu_pull_vector`:** simdgroup per vertex with `simd_sum`.
+  - **`gpu_pull_adaptive`:** vertices binned once by in-degree (untimed preprocessing; small < 16 thread / medium simdgroup / large ≥ 256 threadgroup).
+- **Fixed mode encodes init + all 20 iterations into one command buffer** (no host sync). Tol mode is one command buffer and sync per iteration.
+- gbench `--algo pr`:
+  - in-CSR is the transpose for directed inputs, and the stored graph itself for undirected ones (no copy)
+  - prints ms/iteration and the PLAN's effective-bandwidth estimate
+  - `--dump-ranks`
+  - prints the final L1 change in tol mode
+- `scripts/bench_pr.sh` → `results/pr.csv` (20 iterations, 2+5 runs) and `results/pr_converge.csv` (tol 1e-6, 1+3 runs).
+- `tools/validate_networkx.py` now checks PageRank too (see below).
+- **Tests: 22/22.** Two new tests:
+  - **CPU reference vs hand-derived fixed points:** 2-vertex graph with a dangling vertex (r₀ = 0.5/1.425), a 3-cycle, a complete graph and an empty graph; error < 1e-12.
+  - **Every GPU variant vs `cpu_serial`:** every synthetic graph × fixed/tol mode × tg 32/256/1024, including 4 forced adaptive threshold sets.
+- **Mutation checks (each caught):** dropping the dangling term; push finalize not re-zeroing `acc`.
+
+**Correctness problems found and fixed** (all on star100k, the adversarial case: one hub holds 46% of the rank and receives 100K identical terms)
+1. **Float atomics accumulate rounding systematically.** `gpu_push` gave L1 error 1.0e-3 and ranks summing to 1.00047: 100K adds of ~1e-5 into an accumulator near 0.46 (ulp 3e-8), all rounding the same way. Real graphs were fine (L1 ~1e-7, random rounding). **Fix:** simdgroup-aggregated atomics. In each round, if all active lanes target the same vertex, they `simd_sum` and issue one atomic. Star error is now 1.9e-6. **This also made push faster:** Orkut 395 → 235 ms/iteration, LiveJournal 40.6 → 34.4, web-Google unchanged.
+2. **Sequential float loops have the same problem.** `gpu_pull_scalar` gave L1 1.0e-3 on the star, because one thread sums the hub's 100K in-edges. **Fix:** Kahan summation in every per-thread in-edge loop (scalar, vector lanes, adaptive bins, and the threadgroup accumulator if a hub lands in the small bin). This is valid only because the shaders are compiled with fast math off. Cost 0–8% (LiveJournal vector 16.9 → 18.2 ms on one measurement; web-Google +3–5%; scalar unchanged).
+3. **The float convergence floor can sit above tol.** On the star, the float iterate settles into a rounding cycle with L1 change 1.26e-6 (`gpu_pull_adaptive`) or 4.4e-7 (`gpu_pull_vector`), while double reaches 1e-11. Adaptive ran to the 1000-iteration cap with correct ranks (1.9e-7). **Fix:** a stagnation guard in tol mode. Stop when the L1 change hasn't improved for 5 iterations, and report "stopped at float precision floor" (`floorStop`). Accuracy is still validated against the PLAN tolerances, which are unchanged. The real graphs never hit the floor: every GPU variant converged in the same iteration count as the double reference on all six datasets.
+
+**Test bound decision (not a PLAN tolerance):** in the GPU-vs-reference test, the converged iteration count may differ from the double reference by up to 3. Floor-stopped runs and `gpu_push` on the star are held to the rank check only.
+- path1000: the per-vertex change near convergence is ~1e-9, a difference of floats near 1e-3 (ulp 1.2e-10). The float L1 delta therefore has ~10% noise, which moves the stop by 1–2 iterations (49 vs 47 observed).
+- star100k: `gpu_push`'s atomic order makes its count vary (66–77 vs 90) while its ranks are accurate to 6e-7.
+
+**NetworkX cross-check** (`results/validate_networkx.csv`): `cpu_serial` (tol 1e-10) vs `networkx.pagerank(alpha=0.85)` on all 8 synthetic graphs + ego-Facebook + web-Google. Worst L1 is 3.2e-15 and worst top-1000 relative error 8.7e-15 (web-Google), so **45/45 checks pass** (35 BFS + 10 PageRank).
+- **Deviation from PLAN's `tol=1e-10` for NetworkX:** NetworkX's tol is per node (it stops at L1 < N·tol), which would allow ~1e-4 L1 error on web-Google. I used tol = 1e-10/N, i.e. L1 < 1e-10.
+- 1e-12 is unreachable: on star100k, double power iteration ends in a rounding 2-cycle with L1 change 1.35e-11.
+
+**Results: fixed 20 iterations** (`results/pr.csv`; median ms per iteration, end-to-end; all validated). **Power: battery, Low Power Mode off**; the charger was unplugged during this run. Earlier checks found GPU timings unaffected on battery but CPU ~17% slower, so treat the CPU columns as pessimistic. Rerun on AC in Phase 10. Peak RSS 2.08 GB.
+
+| dataset | cpu_serial | cpu_omp | gpu_push | pull_scalar | pull_vector | pull_adaptive | best GPU vs cpu_omp |
+|---|---|---|---|---|---|---|---|
+| ego-Facebook | 0.116 | 0.102 | 0.559 | 0.133 | **0.022** | 0.059 | 4.6× |
+| web-Google | 9.89 | 2.92 | 2.00 | 2.46 | **1.48** | 1.58 | 2.0× |
+| roadNet-CA | 12.7 | 3.68 | 1.41 | **0.83** | 2.23 | 0.91 | 4.4× |
+| soc-Pokec | 32.6 | 9.84 | 19.5 | 10.4 | 7.71 | **7.57** | 1.3× |
+| soc-LiveJournal1 | 148 | 47.3 | 30.4 | 18.2 | **15.7** | 17.0 | 3.0× |
+| com-Orkut | 311 | 169 | 263 | 78.0 | 57.9 | **54.1** | 3.1× |
+
+**Convergence (tol 1e-6)** (`results/pr_converge.csv`): iterations are **identical for every variant and the double reference** on all six datasets: ego-Facebook 48, web-Google 62, roadNet-CA 57 (adaptive 58 in the first run), Pokec 44, LiveJournal 49, Orkut 45. Tol mode adds the diff kernel and a ~0.1–0.25 ms per-iteration sync. Best GPU convergence times: LiveJournal 0.87 s (`gpu_pull_vector`) vs 2.44 s (`cpu_omp`); Orkut 2.24 s vs 6.45 s.
+
+**Effective bandwidth** (PLAN formula: bytes = 4(n+1) + 8m + 4n per iteration, over e2e time; best pull variant per graph). "Uniform-random rate" is the Phase 3 GPU random-gather rate for a table the size of `contrib`.
+
+| dataset | variant | GB/s | % of 95 GB/s sequential | gathers/s | contrib size | Phase 3 uniform-random rate | ratio |
+|---|---|---|---|---|---|---|---|
+| roadNet-CA | scalar | 72.1 | **76%** | 6.65 G | 7.9 MB | ~1.6 G | 4.2× |
+| web-Google | vector | 32.4 | 34% | 3.45 G | 3.5 MB | ~2.7 G | 1.3× |
+| soc-Pokec | adaptive | 34.1 | 36% | 4.04 G | 6.5 MB | ~1.6 G | 2.5× |
+| soc-LiveJournal1 | vector | 37.4 | 39% | 4.36 G | 19 MB | ~1.1–1.6 G | 2.7–4.0× |
+| com-Orkut | adaptive | 35.1 | 37% | 4.33 G | 12 MB | ~1.1 G | 3.9× |
+
+- **Social graphs reach ~35–39% of sequential bandwidth.** Half of the counted bytes (the `contrib` gathers) are random 4-byte reads, each pulling a cache line.
+- **Their gather rate is 2.5–4× the uniform-random rate for the same table size.** Real orderings have locality: in-neighbors' IDs cluster, so many gathers hit lines already in cache. Phase 9 tests how much of that comes from the ordering.
+- **roadNet-CA reaches 76% of sequential**, the highest of any graph. Its SNAP ordering is strongly local (neighbors have nearby IDs), so gathers behave almost like streaming.
+
+**Conclusions**
+- **Push vs pull: pull wins on every graph with skewed in-degree.** `gpu_push` is 1.9× slower than the best pull on LiveJournal, 2.5× on Pokec and 4.9× on Orkut. Each edge is a random atomic read-modify-write (2× the memory traffic of a gather, plus contention on hubs), while pull does one plain gather per edge plus one store per vertex. Push only comes close on web-Google (2.00 vs 1.48) and roadNet-CA (1.41 vs 0.83): low degrees, little contention. Push also needed simdgroup aggregation to be *accurate*, and it is the only non-deterministic variant.
+- **Scalar vs vector: it depends on degree, as expected.** Vector (32 lanes per vertex, coalesced `col_idx`) beats scalar by 16–34% on the social graphs and 40% on web-Google, but is **2.7× slower on roadNet-CA**. There the average in-degree is 2.8, so ~90% of each simdgroup's lanes idle. Scalar is the reverse.
+- **Adaptive is the robust choice: within 10% of the best variant on every non-tiny graph, and the best on Pokec and Orkut.** It keeps roadNet-CA near scalar (0.91 vs 0.83) and the social graphs near or better than vector. My first adaptive used the BFS-style cooperative small bin and was 1.7× slower than scalar on roadNet (1.43 ms); replacing it with a plain thread-per-vertex loop fixed that, with no loss elsewhere (measured). On ego-Facebook (4K vertices) three dispatches cost more than one.
+- **GPU vs CPU:** the best GPU variant is 2.0–4.6× faster than 8-thread `cpu_omp`, except Pokec (1.3×). CPU numbers were measured on battery.
+
+**Open issues / notes**
+- The Orkut `gpu_pull_vector` fixed-mode run (57.9 ms/iteration) was slower than its own tol-mode run (49.7 ms/iteration, which includes the diff kernel). I suspect a sustained-load or thermal effect on battery (the fixed run is one 1.2 s command buffer). Recheck on AC in Phase 10.
+- All Phase 8 timings were measured on battery (Low Power Mode off). Rerun on AC in Phase 10.

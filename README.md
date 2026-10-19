@@ -38,7 +38,13 @@ set `GGPU_SHADER_DIR` to that directory.
                --threads 8 --validate --csv results/bfs.csv [--trace trace.csv]
 ./build/gbench --graph synth:star100k --variant cpu_omp --schedule guided --validate
 
-.venv/bin/python tools/validate_networkx.py   # cpu_serial vs NetworkX on small graphs
+# PageRank (d = 0.85): fixed 20 iterations (ms/iteration is the metric) or --tol;
+# validated against cpu_serial (double): L1 < 1e-4, top-1000 rel. error < 1e-3, sum 1
+./build/gbench --graph data/soc-LiveJournal1.bin --algo pr --variant gpu_pull_vector --validate
+./build/gbench --graph data/web-Google.bin --algo pr --variant gpu_push --tol 1e-6 --validate
+./scripts/bench_pr.sh                          # all PageRank variants x datasets
+
+.venv/bin/python tools/validate_networkx.py   # cpu_serial BFS + PageRank vs NetworkX
 ./scripts/scaling_cpu.sh                       # OpenMP schedule x thread-count sweep
 ```
 
@@ -56,6 +62,11 @@ OpenMP, `--threads` default 4, directly on the shared buffers; `--T 0` = all
 GPU, `--T inf` = all CPU).
 GPU variants take `--tg` (threadgroup size, default 256) and also report
 kernel-only time (`time_ms_gpu`).
+
+PageRank variants: `cpu_serial` (double, reference), `cpu_omp`, `gpu_push`
+(float atomics, simdgroup-aggregated), `gpu_pull_scalar` (thread per vertex),
+`gpu_pull_vector` (simdgroup per vertex) and `gpu_pull_adaptive` (vertices
+binned by in-degree; `--small-max 16 --large-min 256`).
 
 ```sh
 ./scripts/bench_bfs.sh results/bfs_gpu.csv gpu_vertex gpu_naive gpu_binned gpu_edge   # all datasets, validated

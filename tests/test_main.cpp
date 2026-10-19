@@ -2,12 +2,14 @@
 // Register tests with TEST(name) { ... } and check with CHECK(cond).
 // A failing CHECK records the failure and continues with the next test.
 #include "cpu/bfs_cpu.hpp"
+#include "cpu/pagerank_cpu.hpp"
 #include "graph/csr.hpp"
 #include "graph/generators.hpp"
 #include "graph/snap.hpp"
 #include "graph/transform.hpp"
 #include "metal/bfs_gpu.hpp"
 #include "metal/context.hpp"
+#include "metal/pagerank_gpu.hpp"
 #include "metal/primitives.hpp"
 #include "util/rng.hpp"
 
@@ -18,6 +20,8 @@
 #include <omp.h>
 #include <cstdio>
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <string>
@@ -617,6 +621,94 @@ TEST(hybrid_matches_serial_at_every_threshold) {
     }
 }
 
+// ---------------------------------------------------------------- Phase 8
+
+// Hand-checked fixed points. 2 vertices, edge 0->1, vertex 1 dangling:
+// r0 = 0.075 + 0.425 r1, r0 + r1 = 1  =>  r0 = 0.5 / 1.425. Cycles,
+// complete graphs and the empty graph (all dangling) are uniform.
+TEST(pagerank_cpu_known_answers) {
+    cpu::PrOptions o;
+    o.tol = 1e-14;
+    o.iters = 1000;
+    auto solve = [&](const CSR& g, bool parallel) {
+        CSR in = graph::transpose(g);
+        auto od = cpu::outDegrees(g);
+        std::vector<double> r(g.n);
+        if (parallel) cpu::pagerankOmp(in, od.data(), r.data(), o);
+        else cpu::pagerankSerial(in, od.data(), r.data(), o);
+        return r;
+    };
+    for (bool par : {false, true}) {
+        auto r = solve(graph::fromEdgeList(2, {{0, 1}}, true), par);
+        CHECK(std::fabs(r[0] - 0.5 / 1.425) < 1e-12 && std::fabs(r[1] - (1 - 0.5 / 1.425)) < 1e-12);
+        r = solve(graph::fromEdgeList(3, {{0, 1}, {1, 2}, {2, 0}}, true), par);
+        for (double x : r) CHECK(std::fabs(x - 1.0 / 3) < 1e-12);
+        r = solve(graph::gen::complete(200), par);
+        for (double x : r) CHECK(std::fabs(x - 1.0 / 200) < 1e-12);
+        r = solve(graph::gen::empty(1000), par);
+        for (double x : r) CHECK(std::fabs(x - 1.0 / 1000) < 1e-12);
+    }
+}
+
+// Every GPU variant (and cpu_omp) vs cpu_serial on every synthetic graph:
+// fixed 20 iterations and convergence to 1e-6. The converged iteration count
+// must match the reference within 3: near convergence the per-vertex change
+// is ~1e-9 on path1000, the difference of two floats near 1e-3 (ulp 1.2e-10),
+// so the float L1 delta has ~10% noise around the tolerance; with the delta
+// shrinking only x0.85 per iteration that moves the stop by 1-2 iterations
+// (observed: 49 vs 47). The ranks themselves must still pass checkRanks.
+// Runs that stop at the float precision floor (GpuPrResult::floorStop; the
+// star's hub makes the float L1 change stagnate near 1e-6) skip the
+// iteration-count check; gpu_push's float-atomic order also makes its count
+// vary on the star (69-77 vs 90), so it is held to the rank check only there.
+TEST(pagerank_variants_match_reference) {
+    using gpu::PrVariant;
+    struct Cfg { const char* name; PrVariant v; uint32_t smallMax, largeMin; };
+    const Cfg cfgs[] = {
+        {"push", PrVariant::Push, 16, 256},          {"pull_scalar", PrVariant::PullScalar, 16, 256},
+        {"pull_vector", PrVariant::PullVector, 16, 256}, {"adaptive", PrVariant::PullAdaptive, 16, 256},
+        {"adaptive/all-small", PrVariant::PullAdaptive, 1u << 30, 1u << 31},
+        {"adaptive/all-large", PrVariant::PullAdaptive, 0, 0},
+        {"adaptive/all-medium", PrVariant::PullAdaptive, 0, 1u << 30},
+        {"adaptive/2-3", PrVariant::PullAdaptive, 2, 3},
+    };
+    for (auto& [name, g] : graph::gen::suite()) {
+        CSR in = g.directed() ? graph::transpose(g) : g;
+        auto od = cpu::outDegrees(g);
+        gpu::GpuPageRank gpr(ctx(), g, in, od, true, true);
+        for (double tol : {0.0, 1e-6}) {
+            cpu::PrOptions co;
+            co.tol = tol;
+            co.iters = tol > 0 ? 1000 : 20;
+            std::vector<double> ref(g.n), omp(g.n);
+            int refIters = cpu::pagerankSerial(in, od.data(), ref.data(), co).iters;
+            cpu::pagerankOmp(in, od.data(), omp.data(), co);
+            CHECK(cpu::checkRanks(ref, omp.data()).l1 < 1e-12);
+            for (const Cfg& c : cfgs)
+                for (uint32_t tg : {32u, 256u, 1024u}) {
+                    gpu::GpuPrOptions o;
+                    o.tol = tol;
+                    o.iters = co.iters;
+                    o.tg = tg;
+                    o.smallMax = c.smallMax;
+                    o.largeMin = c.largeMin;
+                    gpu::GpuPrResult r = gpr.run(c.v, o);
+                    cpu::PrCheck chk = cpu::checkRanks(ref, gpr.ranks());
+                    if (!chk.ok())
+                        std::printf("    %s %s tol %g tg %u: L1 %.3g rel %.3g sum %.8f\n", name.c_str(), c.name,
+                                    tol, tg, chk.l1, chk.maxRelTop, chk.sum);
+                    CHECK(chk.ok());
+                    if (r.floorStop) continue;  // float floor reached (star100k): ranks checked above
+                    if (c.v == PrVariant::Push && name == "star100k") continue;
+                    if (std::abs(r.iters - refIters) > 3)
+                        std::printf("    %s %s tg %u: iters %d vs reference %d (last delta %.3g)\n", name.c_str(),
+                                    c.name, tg, r.iters, refIters, r.lastDelta);
+                    CHECK(std::abs(r.iters - refIters) <= 3);
+                }
+        }
+    }
+}
+
 // ---------------------------------------------------------------- runner
 
 int main() {
@@ -624,14 +716,16 @@ int main() {
     for (auto& t : registry()) {
         g_current_failed = false;
         std::printf("[ RUN  ] %s\n", t.name.c_str());
+        auto t0 = std::chrono::steady_clock::now();
         try {
             t.fn();
         } catch (const std::exception& e) {
             std::printf("    unexpected exception: %s\n", e.what());
             g_current_failed = true;
         }
-        if (g_current_failed) { ++g_failures; std::printf("[ FAIL ] %s\n", t.name.c_str()); }
-        else { ++passed; std::printf("[  OK  ] %s\n", t.name.c_str()); }
+        double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        if (g_current_failed) { ++g_failures; std::printf("[ FAIL ] %s (%.1f s)\n", t.name.c_str(), secs); }
+        else { ++passed; std::printf("[  OK  ] %s (%.1f s)\n", t.name.c_str(), secs); }
     }
     std::printf("\n%d passed, %d failed\n", passed, g_failures);
     return g_failures ? 1 : 0;

@@ -10,7 +10,16 @@ cpu_serial, so cpu_serial is checked against an independent implementation.
 BFS: `gbench --variant cpu_serial --dump-dist` vs
 networkx.single_source_shortest_path_length on the undirected (symmetrized)
 graph, for several sources per graph; distances must match exactly.
-PageRank cross-check is added in Phase 8.
+PageRank: `gbench --algo pr --variant cpu_serial --tol 1e-12 --dump-ranks` vs
+networkx.pagerank(alpha=0.85) on the directed graph. networkx's `tol` is per
+node (it stops when the L1 change < N * tol), so PLAN.md's tol=1e-10 would
+allow an L1 error of ~1e-4 on web-Google; we pass tol = 1e-10 / N (L1 change
+< 1e-10) and run cpu_serial with --tol 1e-10, so both sides are within ~1e-9
+of the fixed point, far below the comparison threshold. (1e-12 is not
+reachable: on star100k double-precision power iteration ends in a rounding
+2-cycle with L1 change 1.35e-11, from the hub's 100k-term sum.): L1 < 1e-6 and max relative error on the
+top-1000 vertices < 1e-4 (stricter than PLAN.md 7's GPU tolerances, since
+both sides are double precision).
 Writes results/validate_networkx.csv.
 """
 import argparse
@@ -73,6 +82,32 @@ def pick_sources(n, row_ptr, k, seed=7):
     return list(dict.fromkeys(out))  # dedupe, keep order
 
 
+def to_networkx_directed(n, row_ptr, col_idx):
+    g = nx.DiGraph()
+    g.add_nodes_from(range(n))
+    src = np.repeat(np.arange(n, dtype=np.uint32), np.diff(row_ptr).astype(np.int64))
+    g.add_edges_from(zip(src.tolist(), col_idx.tolist()))
+    return g
+
+
+def check_pr(spec, n, row_ptr, col_idx, tmp):
+    dump = os.path.join(tmp, "ranks.f64")
+    run([GBENCH, "--graph", spec, "--algo", "pr", "--variant", "cpu_serial", "--tol", "1e-10",
+         "--iters", "10000", "--warmup", "0", "--trials", "0", "--dump-ranks", dump])
+    ours = np.fromfile(dump, dtype="<f8")
+    g = to_networkx_directed(n, row_ptr, col_idx)
+    pr = nx.pagerank(g, alpha=0.85, tol=1e-10 / max(n, 1), max_iter=10000)
+    expect = np.array([pr[v] for v in range(n)])
+    del g
+    l1 = float(np.abs(ours - expect).sum())
+    top = np.argsort(-expect)[:1000]
+    rel = float(np.max(np.abs(ours[top] - expect[top]) / expect[top])) if n else 0.0
+    ok = l1 < 1e-6 and rel < 1e-4
+    print(f"  pagerank: L1 {l1:.2e}, max rel (top-1000) {rel:.2e} -> {'OK' if ok else 'FAIL'}")
+    return [{"graph": spec, "algo": "pr", "source": "", "n": n, "reached": "",
+             "mismatches": f"L1={l1:.3e} rel={rel:.3e}", "status": "OK" if ok else "FAIL"}]
+
+
 def check_bfs(spec, n, row_ptr, col_idx, g, sources, tmp):
     rows = []
     for s in sources:
@@ -115,6 +150,7 @@ def main():
                   f"directed={bool(flags & 1)} (networkx build {time.time() - t0:.1f} s)")
             all_rows += check_bfs(spec, n, row_ptr, col_idx, g, pick_sources(n, row_ptr, args.sources), tmp)
             del g
+            all_rows += check_pr(spec, n, row_ptr, col_idx, tmp)
 
     os.makedirs(os.path.dirname(args.csv), exist_ok=True)
     with open(args.csv, "w", newline="") as f:

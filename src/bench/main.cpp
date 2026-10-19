@@ -10,6 +10,10 @@
 //          [--sources 64 | --source S] [--seed 1] [--any-component] [--warmup 2] [--trials 5]
 //          [--source-warmup 1]
 //          [--validate] [--trace trace.csv] [--csv results/bfs.csv] [--ordering original]
+//   gbench --graph data/soc-LiveJournal1.bin --algo pr --variant gpu_pull_vector
+//          [--iters 20 | --tol 1e-6 [--iters 1000]] [--tg 256] [--small-max 16 --large-min 256]
+//          [--threads 8] [--warmup 2] [--trials 5] [--validate] [--csv results/pr.csv]
+//          [--dump-ranks out.f64]
 //   gbench --graph synth:star100k ...         use a generated test graph
 //   gbench --graph X --save-graph out.bin     write the (stored, unsymmetrized) graph
 //   gbench --graph X --variant V --source S --dump-dist out.u32   raw uint32 distances
@@ -33,10 +37,12 @@
 //
 // Compiled as Objective-C++ (Makefile) because GPU variants use Metal types.
 #include "cpu/bfs_cpu.hpp"
+#include "cpu/pagerank_cpu.hpp"
 #include "graph/csr.hpp"
 #include "graph/generators.hpp"
 #include "graph/transform.hpp"
 #include "metal/bfs_gpu.hpp"
+#include "metal/pagerank_gpu.hpp"
 #include "util/args.hpp"
 #include "util/rng.hpp"
 #include "util/sysinfo.hpp"
@@ -352,6 +358,174 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     return 0;
 }
 
+// ---------------------------------------------------------------- PageRank
+//
+// PLAN.md 5.2: runs on the directed graph. Pull variants read the transpose
+// (in-neighbors), gpu_push the stored out-CSR; out-degrees come from the
+// stored graph. Undirected inputs are their own transpose (no copy).
+// Fixed-iteration mode (--iters, default 20) is the benchmark metric: report
+// ms per iteration. --tol runs to convergence (--iters becomes the cap,
+// default 1000) and reports the iteration count. Validation (PLAN.md 7):
+// cpu_serial (double) in the same mode; L1 < 1e-4, max relative error on the
+// top-1000 vertices < 1e-3, sum 1 +- 1e-4.
+// CSV: source empty; iters = iterations run; gteps = m * iters / time.
+// Effective bandwidth (pull variants, PLAN.md Phase 8): bytes per iteration
+// = 4(n+1) + 4m + 4m + 4n (row_ptr, col_idx, contrib gathers, writes).
+
+const std::vector<std::string> kPrVariants = {"cpu_serial", "cpu_omp", "gpu_push", "gpu_pull_scalar",
+                                              "gpu_pull_vector", "gpu_pull_adaptive"};
+
+int runPr(const util::Args& args, const CSR& stored, const std::string& dataset) {
+    const std::string variant = args.get("variant", "cpu_serial");
+    if (std::find(kPrVariants.begin(), kPrVariants.end(), variant) == kPrVariants.end()) {
+        std::fprintf(stderr, "unknown PageRank variant '%s'. Available:", variant.c_str());
+        for (auto& k : kPrVariants) std::fprintf(stderr, " %s", k.c_str());
+        std::fprintf(stderr, "\n");
+        return 2;
+    }
+    const bool gpuVariant = variant.rfind("gpu_", 0) == 0;
+    const double tol = args.getDouble("tol", 0);
+    cpu::PrOptions copt;
+    copt.tol = tol;
+    copt.iters = (int)args.getInt("iters", tol > 0 ? 1000 : 20);
+    copt.threads = (int)args.getInt("threads", 0);
+    gpu::GpuPrOptions gopt;
+    gopt.iters = copt.iters;
+    gopt.tol = tol;
+    gopt.tg = (uint32_t)args.getInt("tg", 256);
+    gopt.smallMax = (uint32_t)args.getInt("small-max", 16);
+    gopt.largeMin = (uint32_t)args.getInt("large-min", 256);
+
+    util::Timer prep;
+    const bool needIn = variant != "gpu_push";
+    CSR in = stored.directed() ? (needIn || args.has("validate") ? graph::transpose(stored) : CSR{})
+                               : stored;
+    std::vector<uint32_t> outdeg = cpu::outDegrees(stored);
+    std::unique_ptr<gpu::MetalContext> ctx;
+    std::unique_ptr<gpu::GpuPageRank> gpr;
+    if (gpuVariant) {
+        ctx = std::make_unique<gpu::MetalContext>();
+        gpr = std::make_unique<gpu::GpuPageRank>(*ctx, stored, in, outdeg, variant == "gpu_push", needIn);
+        if (variant == "gpu_pull_adaptive") gpr->prepareAdaptive(gopt.smallMax, gopt.largeMin);
+    }
+    const double prepMs = prep.ms();
+    const uint64_t n = stored.n, m = stored.m;
+
+    std::string params = tol > 0 ? "tol=" + std::to_string(tol).substr(0, 8) + " cap=" + std::to_string(copt.iters)
+                                 : "iters=" + std::to_string(copt.iters);
+    if (variant == "cpu_omp")
+        params += " threads=" + std::to_string(copt.threads > 0 ? copt.threads : omp_get_max_threads());
+    if (gpuVariant) params += " tg=" + std::to_string(gopt.tg);
+    if (variant == "gpu_pull_adaptive")
+        params += " small_max=" + std::to_string(gopt.smallMax) + " large_min=" + std::to_string(gopt.largeMin);
+    std::printf("%s: n %llu, m %llu (directed=%d), prep %.0f ms\npr %s [%s]\n", dataset.c_str(),
+                (unsigned long long)n, (unsigned long long)m, (int)stored.directed(), prepMs, variant.c_str(),
+                params.c_str());
+
+    std::vector<double> rcpu(n);
+    // Runs the variant once; returns {iterations, gpu ms (or -1)}; sets lastDelta.
+    double lastDelta = -1;
+    bool floorStop = false;
+    auto runOnce = [&]() -> std::pair<int, double> {
+        if (!gpuVariant) {
+            cpu::PrResult r = variant == "cpu_serial" ? cpu::pagerankSerial(in, outdeg.data(), rcpu.data(), copt)
+                                                      : cpu::pagerankOmp(in, outdeg.data(), rcpu.data(), copt);
+            lastDelta = r.lastDelta;
+            return {r.iters, -1};
+        }
+        gpu::GpuPrResult r = gpr->run(gpu::parsePrVariant(variant), gopt);
+        lastDelta = r.lastDelta;
+        floorStop = r.floorStop;
+        return {r.iters, r.gpuMs};
+    };
+    auto check = [&](const std::vector<double>& ref) {
+        return gpuVariant ? cpu::checkRanks(ref, gpr->ranks()) : cpu::checkRanks(ref, rcpu.data());
+    };
+
+    const bool validate = args.has("validate");
+    std::vector<double> ref;
+    int refIters = 0;
+    if (validate) {
+        ref.resize(n);
+        refIters = cpu::pagerankSerial(in, outdeg.data(), ref.data(), copt).iters;
+    }
+
+    const int warmup = (int)args.getInt("warmup", 2), trials = (int)args.getInt("trials", 5);
+    for (int w = 0; w < warmup; ++w) runOnce();
+
+    const std::string csvPath = args.get("csv", "");
+    std::ofstream csv;
+    if (!csvPath.empty()) {
+        bool fresh = !fileExists(csvPath);
+        csv.open(csvPath, std::ios::app);
+        if (fresh)
+            csv << "timestamp,git_commit,chip,dataset,n,m,ordering,algo,variant,params,source,trial,"
+                   "time_ms_e2e,time_ms_gpu,gteps,iters,validated,load1\n";
+    }
+    const std::string ts = util::timestamp(), commit = util::gitCommit(), chip = util::chipName();
+    const double load1 = util::loadAverage1();
+    const std::string ordering = args.get("ordering", "original");
+
+    std::vector<double> times, gpuTimes;
+    int iters = 0;
+    cpu::PrCheck worst;
+    for (int t = 0; t < trials; ++t) {
+        util::Timer timer;
+        auto [it, gpuMs] = runOnce();
+        double ms = timer.ms();
+        iters = it;
+        if (validate) {
+            cpu::PrCheck c = check(ref);
+            if (!c.ok()) {
+                std::fprintf(stderr, "VALIDATION FAILED: %s trial %d: L1 %.3g, max rel (top-1000) %.3g, sum %.8f\n",
+                             variant.c_str(), t, c.l1, c.maxRelTop, c.sum);
+                return 1;
+            }
+            if (c.l1 >= worst.l1) worst = c;
+        }
+        times.push_back(ms);
+        if (gpuMs >= 0) gpuTimes.push_back(gpuMs);
+        if (csv.is_open()) {
+            char gpuField[32] = "";
+            if (gpuMs >= 0) std::snprintf(gpuField, sizeof gpuField, "%.4f", gpuMs);
+            char row[1024];
+            std::snprintf(row, sizeof row, "%s,%s,%s,%s,%llu,%llu,%s,pr,%s,%s,,%d,%.4f,%s,%.6f,%d,%d,%.2f\n",
+                          ts.c_str(), commit.c_str(), chip.c_str(), dataset.c_str(), (unsigned long long)n,
+                          (unsigned long long)m, ordering.c_str(), variant.c_str(), params.c_str(), t, ms,
+                          gpuField, (double)m * it / (ms * 1e6), it, validate ? 1 : 0, load1);
+            csv << row;
+        }
+    }
+    if (!times.empty()) {
+        const double med = median(times), perIt = med / std::max(1, iters);
+        std::printf("time ms: median %.3f, min %.3f | %d iterations, %.4f ms/iteration",
+                    med, *std::min_element(times.begin(), times.end()), iters, perIt);
+        if (!gpuTimes.empty()) std::printf(" (GPU-only %.4f)", median(gpuTimes) / std::max(1, iters));
+        if (tol > 0)
+            std::printf(" | final L1 change %.3g%s", lastDelta,
+                        lastDelta < tol ? "" : floorStop ? " (stopped at float precision floor)" : " (NOT converged)");
+        if (variant != "gpu_push" && variant != "cpu_serial") {
+            // PLAN.md Phase 8 effective-bandwidth estimate, from the e2e time per iteration.
+            double bytes = 4.0 * (n + 1) + 8.0 * m + 4.0 * n;
+            std::printf(" | eff. %.1f GB/s, %.3f Ggathers/s", bytes / (perIt * 1e6), m / (perIt * 1e6));
+        }
+        if (validate)
+            std::printf(" | validated OK (ref %d iters; worst L1 %.2e, top-1000 rel %.2e, sum-1 %.1e)", refIters,
+                        worst.l1, worst.maxRelTop, worst.sum - 1.0);
+        std::printf("\n");
+    }
+
+    const std::string dumpPath = args.get("dump-ranks", "");
+    if (!dumpPath.empty()) {
+        if (trials == 0) runOnce();
+        std::vector<double> outRanks(n);
+        for (uint64_t v = 0; v < n; ++v) outRanks[v] = gpuVariant ? gpr->ranks()[v] : rcpu[v];
+        std::ofstream o(dumpPath, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(outRanks.data()), n * sizeof(double));
+    }
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -371,7 +545,8 @@ int main(int argc, char** argv) {
         }
         const std::string algo = args.get("algo", "bfs");
         if (algo == "bfs") return runBfs(args, g, dataset);
-        std::fprintf(stderr, "unknown --algo '%s' (bfs; pr arrives in Phase 8)\n", algo.c_str());
+        if (algo == "pr") return runPr(args, g, dataset);
+        std::fprintf(stderr, "unknown --algo '%s' (bfs | pr)\n", algo.c_str());
         return 2;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "gbench: %s\n", e.what());

@@ -24,6 +24,7 @@ LDLIBS   := -lomp -framework Metal -framework Foundation -lz
 
 # Code shared by every executable. Grows phase by phase.
 LIB_SRCS := src/metal/context.mm src/metal/primitives.mm src/metal/bfs_gpu.mm \
+            src/metal/pagerank_gpu.mm src/cpu/pagerank_cpu.cpp \
             src/graph/csr.cpp src/graph/snap.cpp src/graph/transform.cpp \
             src/graph/generators.cpp src/cpu/bfs_cpu.cpp src/cpu/bfs_steps.cpp
 LIB_OBJS := $(patsubst src/%,$(OBJDIR)/%.o,$(LIB_SRCS))
