@@ -17,6 +17,10 @@
 //   gbench --graph synth:star100k ...         use a generated test graph
 //   gbench --graph X --save-graph out.bin     write the (stored, unsymmetrized) graph
 //   gbench --graph X --variant V --source S --dump-dist out.u32   raw uint32 distances
+//   --ordering original|random|degree|rcm   relabel vertices first (untimed; Phase 9),
+//          [--locality-csv results/reorder_locality.csv]   and record the locality metrics.
+//          Sources, references and TEPS denominators stay in ORIGINAL ids: results on
+//          the relabeled graph are mapped back (v -> perm[v]) before validation.
 //
 // Methodology (PLAN.md 8): BFS runs on the symmetrized graph; sources are
 // random vertices with degree > 0 in the largest connected component, from a
@@ -40,10 +44,12 @@
 #include "cpu/pagerank_cpu.hpp"
 #include "graph/csr.hpp"
 #include "graph/generators.hpp"
+#include "graph/reorder.hpp"
 #include "graph/transform.hpp"
 #include "metal/bfs_gpu.hpp"
 #include "metal/pagerank_gpu.hpp"
 #include "util/args.hpp"
+#include "util/csv.hpp"
 #include "util/rng.hpp"
 #include "util/sysinfo.hpp"
 #include "util/timer.hpp"
@@ -167,6 +173,30 @@ double median(std::vector<double> v) {
 
 bool fileExists(const std::string& p) { struct stat st; return stat(p.c_str(), &st) == 0; }
 
+// --ordering: perm[old] = new, computed on the symmetrized graph (empty for
+// "original"). --locality-csv: metrics of the relabeled symmetric graph,
+// one row per dataset/ordering (replaced on re-run).
+std::vector<uint32_t> orderingPerm(const util::Args& args, const CSR& sym, const std::string& dataset) {
+    const std::string ordering = args.get("ordering", "original");
+    std::vector<uint32_t> perm;
+    util::Timer t;
+    if (ordering != "original") perm = graph::reorder::compute(sym, ordering, (uint64_t)args.getInt("order-seed", 1));
+    const double orderMs = t.ms();
+    if (args.has("locality-csv")) {
+        CSR relabeled = perm.empty() ? sym : graph::permute(sym, perm);
+        graph::reorder::Locality l = graph::reorder::locality(relabeled);
+        char row[256];
+        std::snprintf(row, sizeof row, "%s/%s,%s,%s,%llu,%llu,%.2f,%.6f,%.0f", dataset.c_str(), ordering.c_str(),
+                      dataset.c_str(), ordering.c_str(), (unsigned long long)sym.n, (unsigned long long)sym.m,
+                      l.meanGap, l.sameBlock64, orderMs);
+        util::csvUpsert(args.get("locality-csv"), "key,dataset,ordering,n,m_sym,mean_gap,same_block64,order_ms",
+                        dataset + "/" + ordering, {row});
+        std::printf("locality (%s): mean |u-v| %.1f, same 64-block %.2f%%, ordering took %.0f ms\n",
+                    ordering.c_str(), l.meanGap, 100 * l.sameBlock64, orderMs);
+    }
+    return perm;
+}
+
 int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset) {
     const std::string variant = args.get("variant", "cpu_serial");
     if (std::find(kVariants.begin(), kVariants.end(), variant) == kVariants.end()) {
@@ -198,19 +228,27 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     // Transform cost (and the GPU upload) is outside every timed region (PLAN 4.4).
     util::Timer prep;
     CSR g = graph::symmetrize(stored);
+    // refG keeps ORIGINAL labels: sources, reference BFS, TEPS denominators.
+    // g is what the variant runs on (relabeled if --ordering is not original).
+    CSR refG = g;
+    const std::vector<uint32_t> perm = orderingPerm(args, g, dataset);
+    const bool permuted = !perm.empty();
+    if (permuted) g = graph::permute(g, perm);
+    auto toRun = [&](uint32_t s) { return permuted ? perm[s] : s; };  // original id -> run id
     std::unique_ptr<gpu::MetalContext> ctx;
     std::unique_ptr<gpu::GpuBfs> gbfs;
     if (gpuVariant) {
         ctx = std::make_unique<gpu::MetalContext>();
         gbfs = std::make_unique<gpu::GpuBfs>(*ctx, g);
         g = gbfs->graph();  // releases the host copy (unless shared with `stored`)
+        if (!permuted) refG = g;  // same labels: let the reference use the GPU's bytes too
     }
     double prepMs = prep.ms();
     const BfsFn fn = bfsVariant(variant, gbfs.get(), gopt);
 
     std::vector<uint32_t> sources;
     if (args.has("source")) sources = {(uint32_t)args.getInt("source", 0)};
-    else sources = pickSources(g, (int)args.getInt("sources", 64), (uint64_t)args.getInt("seed", 1),
+    else sources = pickSources(refG, (int)args.getInt("sources", 64), (uint64_t)args.getInt("seed", 1),
                                 args.has("any-component"));
     if (sources.empty()) { std::fprintf(stderr, "no vertex with degree > 0\n"); return 1; }
     for (uint32_t s : sources)
@@ -220,6 +258,16 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     const int sourceWarmup = (int)args.getInt("source-warmup", 1);
     const bool validate = args.has("validate");
     const std::string ordering = args.get("ordering", "original");
+    // dist (run ids) equals ref (original ids) after mapping v -> perm[v].
+    auto matches = [&](const uint32_t* d, const std::vector<uint32_t>& r, uint64_t* bad) {
+        if (!permuted) {
+            if (std::memcmp(d, r.data(), g.n * sizeof(uint32_t)) == 0) return true;
+            for (uint64_t v = 0; v < g.n; ++v) if (d[v] != r[v]) { *bad = v; break; }
+            return false;
+        }
+        for (uint64_t v = 0; v < g.n; ++v) if (d[perm[v]] != r[v]) { *bad = v; return false; }
+        return true;
+    };
 
     // Only parameters that affect the variant go into the CSV "params" field
     // (space-separated; never commas).
@@ -254,7 +302,7 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     // GPU variants write straight into their shared output buffer.
     std::vector<uint32_t> distHost(gbfs ? 0 : g.n), ref(g.n);
     uint32_t* dist = gbfs ? gbfs->dist() : distHost.data();
-    for (int w = 0; w < warmup; ++w) fn(g, sources[w % sources.size()], dist, opt, nullptr);
+    for (int w = 0; w < warmup; ++w) fn(g, toRun(sources[w % sources.size()]), dist, opt, nullptr);
 
     // CSV output: header written when the file is new; rows appended.
     const std::string csvPath = args.get("csv", "");
@@ -275,25 +323,23 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
         // denominator. Computed per source and not kept: holding all 64
         // reference arrays costs 64*4n bytes (786 MB on Orkut) and pushed the
         // 8 GB machine into swap.
-        cpu::bfsSerial(g, sources[si], ref.data());
+        cpu::bfsSerial(refG, sources[si], ref.data());
         uint64_t degSum = 0;
-        for (uint64_t v = 0; v < g.n; ++v) if (ref[v] != cpu::kUnreached) degSum += g.degree(v);
+        for (uint64_t v = 0; v < refG.n; ++v) if (ref[v] != cpu::kUnreached) degSum += refG.degree(v);
         const uint64_t compEdges = degSum / 2;
 
-        for (int w = 0; w < sourceWarmup && trials > 0; ++w) fn(g, sources[si], dist, opt, nullptr);
+        for (int w = 0; w < sourceWarmup && trials > 0; ++w) fn(g, toRun(sources[si]), dist, opt, nullptr);
         std::vector<double> times;
         for (int t = 0; t < trials; ++t) {
             util::Timer timer;
-            fn(g, sources[si], dist, opt, nullptr);
+            fn(g, toRun(sources[si]), dist, opt, nullptr);
             double ms = timer.ms();
             double gpuMs = gbfs ? gbfs->lastGpuMs() : -1;
-            if (validate && std::memcmp(dist, ref.data(), g.n * sizeof(uint32_t)) != 0) {
-                for (uint64_t v = 0; v < g.n; ++v)
-                    if (dist[v] != ref[v]) {
-                        std::fprintf(stderr, "VALIDATION FAILED: %s source %u trial %d: dist[%llu] = %u, expected %u\n",
-                                     variant.c_str(), sources[si], t, (unsigned long long)v, dist[v], ref[v]);
-                        break;
-                    }
+            uint64_t bad = 0;
+            if (validate && !matches(dist, ref, &bad)) {
+                std::fprintf(stderr, "VALIDATION FAILED: %s [%s] source %u trial %d: vertex %llu: got %u, expected %u\n",
+                             variant.c_str(), ordering.c_str(), sources[si], t, (unsigned long long)bad,
+                             dist[toRun((uint32_t)bad)], ref[bad]);
                 return 1;
             }
             double gteps = compEdges / (ms * 1e6);
@@ -335,7 +381,7 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
         if (fresh) tr << "dataset,ordering,variant,params,source,level,frontier,edges,direction,device,time_ms\n";
         for (uint32_t s : sources) {
             std::vector<util::BfsLevel> levels;
-            fn(g, s, dist, opt, &levels);
+            fn(g, toRun(s), dist, opt, &levels);  // trace rows keep the original source id
             for (auto& L : levels) {
                 char row[512];
                 std::snprintf(row, sizeof row, "%s,%s,%s,%s,%u,%u,%llu,%llu,%c,%c,%.4f\n", dataset.c_str(),
@@ -351,9 +397,11 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     // --dump-dist: raw uint32 distances of the (last) run, for external checks.
     const std::string dumpPath = args.get("dump-dist", "");
     if (!dumpPath.empty()) {
-        fn(g, sources.back(), dist, opt, nullptr);
+        fn(g, toRun(sources.back()), dist, opt, nullptr);
+        std::vector<uint32_t> orig(g.n);  // back to original ids
+        for (uint64_t v = 0; v < g.n; ++v) orig[v] = dist[toRun((uint32_t)v)];
         std::ofstream out(dumpPath, std::ios::binary);
-        out.write(reinterpret_cast<const char*>(dist), g.n * sizeof(uint32_t));
+        out.write(reinterpret_cast<const char*>(orig.data()), g.n * sizeof(uint32_t));
     }
     return 0;
 }
@@ -398,15 +446,39 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
 
     util::Timer prep;
     const bool needIn = variant != "gpu_push";
-    CSR in = stored.directed() ? (needIn || args.has("validate") ? graph::transpose(stored) : CSR{})
-                               : stored;
-    std::vector<uint32_t> outdeg = cpu::outDegrees(stored);
+    const bool validate = args.has("validate");
+    const std::string ordering = args.get("ordering", "original");
+    // --ordering: perm from the symmetrized graph (as for BFS), applied to the directed graph.
+    std::vector<uint32_t> perm;
+    {
+        CSR sym = graph::symmetrize(stored);
+        perm = orderingPerm(args, sym, dataset);
+    }
+    const bool permuted = !perm.empty();
+
+    // Reference in ORIGINAL labels, computed before relabeling so the
+    // original transpose is freed before the relabeled graph is built
+    // (Orkut: three ~0.9 GB copies at once would exceed the 3 GB budget).
+    std::vector<double> ref;
+    int refIters = 0;
+    if (validate) {
+        CSR inO = stored.directed() ? graph::transpose(stored) : stored;
+        std::vector<uint32_t> odO = cpu::outDegrees(stored);
+        ref.resize(stored.n);
+        refIters = cpu::pagerankSerial(inO, odO.data(), ref.data(), copt).iters;
+    }
+
+    CSR graphP = permuted ? graph::permute(stored, perm) : stored;  // what the variant runs on
+    CSR in = graphP.directed() ? (needIn ? graph::transpose(graphP) : CSR{}) : graphP;
+    std::vector<uint32_t> outdeg = cpu::outDegrees(graphP);
     std::unique_ptr<gpu::MetalContext> ctx;
     std::unique_ptr<gpu::GpuPageRank> gpr;
     if (gpuVariant) {
         ctx = std::make_unique<gpu::MetalContext>();
-        gpr = std::make_unique<gpu::GpuPageRank>(*ctx, stored, in, outdeg, variant == "gpu_push", needIn);
+        gpr = std::make_unique<gpu::GpuPageRank>(*ctx, graphP, in, outdeg, variant == "gpu_push", needIn);
         if (variant == "gpu_pull_adaptive") gpr->prepareAdaptive(gopt.smallMax, gopt.largeMin);
+        in = CSR{};      // the GPU has its own copies; drop the host ones
+        graphP = CSR{};
     }
     const double prepMs = prep.ms();
     const uint64_t n = stored.n, m = stored.m;
@@ -418,9 +490,9 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
     if (gpuVariant) params += " tg=" + std::to_string(gopt.tg);
     if (variant == "gpu_pull_adaptive")
         params += " small_max=" + std::to_string(gopt.smallMax) + " large_min=" + std::to_string(gopt.largeMin);
-    std::printf("%s: n %llu, m %llu (directed=%d), prep %.0f ms\npr %s [%s]\n", dataset.c_str(),
-                (unsigned long long)n, (unsigned long long)m, (int)stored.directed(), prepMs, variant.c_str(),
-                params.c_str());
+    std::printf("%s: n %llu, m %llu (directed=%d), ordering %s, prep %.0f ms\npr %s [%s]\n", dataset.c_str(),
+                (unsigned long long)n, (unsigned long long)m, (int)stored.directed(), ordering.c_str(), prepMs,
+                variant.c_str(), params.c_str());
 
     std::vector<double> rcpu(n);
     // Runs the variant once; returns {iterations, gpu ms (or -1)}; sets lastDelta.
@@ -438,17 +510,18 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
         floorStop = r.floorStop;
         return {r.iters, r.gpuMs};
     };
-    auto check = [&](const std::vector<double>& ref) {
-        return gpuVariant ? cpu::checkRanks(ref, gpr->ranks()) : cpu::checkRanks(ref, rcpu.data());
+    // Ranks in ORIGINAL ids (rank of original vertex v = result[perm[v]]).
+    auto originalRanks = [&]() {
+        std::vector<double> out(n);
+        for (uint64_t v = 0; v < n; ++v) {
+            uint64_t r = permuted ? perm[v] : v;
+            out[v] = gpuVariant ? gpr->ranks()[r] : rcpu[r];
+        }
+        return out;
     };
-
-    const bool validate = args.has("validate");
-    std::vector<double> ref;
-    int refIters = 0;
-    if (validate) {
-        ref.resize(n);
-        refIters = cpu::pagerankSerial(in, outdeg.data(), ref.data(), copt).iters;
-    }
+    auto check = [&](const std::vector<double>& reference) {
+        return cpu::checkRanks(reference, originalRanks().data());
+    };
 
     const int warmup = (int)args.getInt("warmup", 2), trials = (int)args.getInt("trials", 5);
     for (int w = 0; w < warmup; ++w) runOnce();
@@ -464,7 +537,6 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
     }
     const std::string ts = util::timestamp(), commit = util::gitCommit(), chip = util::chipName();
     const double load1 = util::loadAverage1();
-    const std::string ordering = args.get("ordering", "original");
 
     std::vector<double> times, gpuTimes;
     int iters = 0;
@@ -518,8 +590,7 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
     const std::string dumpPath = args.get("dump-ranks", "");
     if (!dumpPath.empty()) {
         if (trials == 0) runOnce();
-        std::vector<double> outRanks(n);
-        for (uint64_t v = 0; v < n; ++v) outRanks[v] = gpuVariant ? gpr->ranks()[v] : rcpu[v];
+        std::vector<double> outRanks = originalRanks();
         std::ofstream o(dumpPath, std::ios::binary);
         o.write(reinterpret_cast<const char*>(outRanks.data()), n * sizeof(double));
     }

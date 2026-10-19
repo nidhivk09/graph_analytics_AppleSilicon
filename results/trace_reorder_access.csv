@@ -1,0 +1,233 @@
+dataset,ordering,variant,params,source,level,frontier,edges,direction,device,time_ms
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,0,1,1,T,G,0.6772
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,1,1,370,T,G,0.4168
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,2,369,42371,T,G,0.5962
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,3,23181,2303980,T,G,3.3345
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,4,606911,34416114,T,G,9.3319
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,5,2424670,39295999,T,G,9.5751
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,6,1486176,8662351,T,G,2.2848
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,7,265422,863363,T,G,0.6187
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,8,32286,92926,T,G,0.4468
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,9,4224,11596,T,G,0.4378
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,10,605,1964,T,G,0.4172
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,11,99,323,T,G,0.4196
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,12,6,8,T,G,0.4125
+soc-LiveJournal1,original,gpu_vertex,tg=256,2746447,13,2,2,T,G,0.4271
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,0,1,2,T,G,0.6278
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,1,2,61,T,G,0.4161
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,2,58,1755,T,G,0.4295
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,3,1280,76006,T,G,2.1792
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,4,54249,4648680,T,G,3.4849
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,5,1204056,49540854,T,G,12.6790
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,6,2585744,27377246,T,G,6.5000
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,7,867449,3675755,T,G,1.2139
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,8,114115,320564,T,G,0.5268
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,9,14673,44660,T,G,0.4424
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,10,1932,4363,T,G,0.4339
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,11,336,1217,T,G,0.4154
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,12,53,199,T,G,0.4180
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,13,4,5,T,G,0.4148
+soc-LiveJournal1,original,gpu_vertex,tg=256,3615230,14,1,1,T,G,0.4129
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,0,1,1,T,G,0.6322
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,1,1,18,T,G,0.4142
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,2,17,205,T,G,0.4135
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,3,119,6331,T,G,0.4255
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,4,4982,388524,T,G,3.5828
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,5,238283,15544432,T,G,5.9272
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,6,2094725,54047966,T,G,13.3052
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,7,2037625,13751785,T,G,3.4489
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,8,409465,1765279,T,G,0.7887
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,9,51233,163233,T,G,0.4550
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,10,6373,20245,T,G,0.4268
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,11,905,2320,T,G,0.4181
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,12,201,954,T,G,0.4290
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,13,21,73,T,G,0.4241
+soc-LiveJournal1,original,gpu_vertex,tg=256,4707004,14,2,2,T,G,0.4213
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,0,1,1,T,G,0.6390
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,1,1,72,T,G,0.4129
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,2,71,4165,T,G,0.4577
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,3,3167,295684,T,G,3.5884
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,4,200808,15374187,T,G,6.1106
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,5,2051902,54057523,T,G,13.9052
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,6,2088464,14305613,T,G,3.6699
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,7,438457,1475114,T,G,0.7799
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,8,53366,157302,T,G,0.4627
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,9,6546,18443,T,G,0.4246
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,10,979,2486,T,G,0.4123
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,11,181,766,T,G,0.4201
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,12,8,10,T,G,0.4144
+soc-LiveJournal1,original,gpu_vertex,tg=256,2154062,13,2,2,T,G,0.4252
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,0,1,1,T,G,0.3991
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,1,1,370,T,G,0.1629
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,2,369,42371,T,G,0.2177
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,3,23181,2303980,T,G,1.1889
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,4,606911,34416114,T,G,10.3596
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,5,2424670,39295999,T,G,17.7723
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,6,1486176,8662351,T,G,6.4172
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,7,265422,863363,T,G,0.5980
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,8,32286,92926,T,G,0.2188
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,9,4224,11596,T,G,0.1804
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,10,605,1964,T,G,0.1708
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,11,99,323,T,G,0.1643
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,12,6,8,T,G,0.1821
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2746447,13,2,2,T,G,0.1588
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,0,1,2,T,G,0.3545
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,1,2,61,T,G,0.1839
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,2,58,1755,T,G,0.1751
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,3,1280,76006,T,G,0.2856
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,4,54249,4648680,T,G,2.4072
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,5,1204056,49540854,T,G,15.5188
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,6,2585744,27377246,T,G,15.2275
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,7,867449,3675755,T,G,2.7981
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,8,114115,320564,T,G,0.3382
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,9,14673,44660,T,G,0.2110
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,10,1932,4363,T,G,0.1814
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,11,336,1217,T,G,0.1773
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,12,53,199,T,G,0.1622
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,13,4,5,T,G,0.1783
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,3615230,14,1,1,T,G,0.1490
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,0,1,1,T,G,0.3556
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,1,1,18,T,G,0.1604
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,2,17,205,T,G,0.1656
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,3,119,6331,T,G,0.1878
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,4,4982,388524,T,G,0.5465
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,5,238283,15544432,T,G,5.8725
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,6,2094725,54047966,T,G,19.3334
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,7,2037625,13751785,T,G,9.6635
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,8,409465,1765279,T,G,1.0360
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,9,51233,163233,T,G,0.2432
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,10,6373,20245,T,G,0.1761
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,11,905,2320,T,G,0.1723
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,12,201,954,T,G,0.1765
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,13,21,73,T,G,0.1604
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,4707004,14,2,2,T,G,0.1576
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,0,1,1,T,G,0.3470
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,1,1,72,T,G,0.1741
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,2,71,4165,T,G,0.1795
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,3,3167,295684,T,G,0.4758
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,4,200808,15374187,T,G,5.5654
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,5,2051902,54057523,T,G,19.1770
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,6,2088464,14305613,T,G,10.1339
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,7,438457,1475114,T,G,1.0786
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,8,53366,157302,T,G,0.2427
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,9,6546,18443,T,G,0.1956
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,10,979,2486,T,G,0.1765
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,11,181,766,T,G,0.1862
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,12,8,10,T,G,0.1740
+soc-LiveJournal1,original,gpu_edge,tg=256 ept=2,2154062,13,2,2,T,G,0.1514
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,0,1,1,T,G,1.0438
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,1,1,370,T,G,0.4968
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,2,369,42371,T,G,0.5925
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,3,23181,2303980,T,G,5.4268
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,4,606911,34416114,T,G,26.0812
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,5,2424670,39295999,T,G,23.8805
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,6,1486176,8662351,T,G,6.0470
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,7,265422,863363,T,G,1.2665
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,8,32286,92926,T,G,0.5593
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,9,4224,11596,T,G,0.4605
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,10,605,1964,T,G,0.4305
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,11,99,323,T,G,0.4361
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,12,6,8,T,G,0.4212
+soc-LiveJournal1,random,gpu_vertex,tg=256,2746447,13,2,2,T,G,0.4347
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,0,1,2,T,G,0.6391
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,1,2,61,T,G,0.4202
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,2,58,1755,T,G,0.4292
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,3,1280,76006,T,G,2.1068
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,4,54249,4648680,T,G,10.6158
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,5,1204056,49540854,T,G,30.2494
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,6,2585744,27377246,T,G,16.7297
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,7,867449,3675755,T,G,3.1823
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,8,114115,320564,T,G,0.8243
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,9,14673,44660,T,G,0.4991
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,10,1932,4363,T,G,0.4422
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,11,336,1217,T,G,0.4232
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,12,53,199,T,G,0.4275
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,13,4,5,T,G,0.4253
+soc-LiveJournal1,random,gpu_vertex,tg=256,3615230,14,1,1,T,G,0.4221
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,0,1,1,T,G,0.6351
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,1,1,18,T,G,0.4324
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,2,17,205,T,G,0.4216
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,3,119,6331,T,G,0.4660
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,4,4982,388524,T,G,4.1435
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,5,238283,15544432,T,G,17.6676
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,6,2094725,54047966,T,G,32.6362
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,7,2037625,13751785,T,G,9.7203
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,8,409465,1765279,T,G,2.0197
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,9,51233,163233,T,G,0.7034
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,10,6373,20245,T,G,0.4627
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,11,905,2320,T,G,0.4284
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,12,201,954,T,G,0.4441
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,13,21,73,T,G,0.4161
+soc-LiveJournal1,random,gpu_vertex,tg=256,4707004,14,2,2,T,G,0.4243
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,0,1,1,T,G,0.6538
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,1,1,72,T,G,0.4231
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,2,71,4165,T,G,0.6076
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,3,3167,295684,T,G,4.4926
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,4,200808,15374187,T,G,18.5929
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,5,2051902,54057523,T,G,32.3078
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,6,2088464,14305613,T,G,9.3220
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,7,438457,1475114,T,G,1.7343
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,8,53366,157302,T,G,0.6405
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,9,6546,18443,T,G,0.4567
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,10,979,2486,T,G,0.4219
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,11,181,766,T,G,0.4148
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,12,8,10,T,G,0.4082
+soc-LiveJournal1,random,gpu_vertex,tg=256,2154062,13,2,2,T,G,0.4170
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,0,1,1,T,G,0.8677
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,1,1,370,T,G,0.2255
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,2,369,42371,T,G,0.2642
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,3,23181,2303980,T,G,2.2307
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,4,606911,34416114,T,G,20.2682
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,5,2424670,39295999,T,G,31.7351
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,6,1486176,8662351,T,G,14.0125
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,7,265422,863363,T,G,2.4358
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,8,32286,92926,T,G,0.4595
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,9,4224,11596,T,G,0.2308
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,10,605,1964,T,G,0.1755
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,11,99,323,T,G,0.1740
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,12,6,8,T,G,0.1640
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2746447,13,2,2,T,G,0.1563
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,0,1,2,T,G,0.3499
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,1,2,61,T,G,0.1700
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,2,58,1755,T,G,0.1758
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,3,1280,76006,T,G,0.3320
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,4,54249,4648680,T,G,4.6184
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,5,1204056,49540854,T,G,28.7662
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,6,2585744,27377246,T,G,28.4196
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,7,867449,3675755,T,G,7.5670
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,8,114115,320564,T,G,1.1245
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,9,14673,44660,T,G,0.3088
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,10,1932,4363,T,G,0.1930
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,11,336,1217,T,G,0.1688
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,12,53,199,T,G,0.1562
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,13,4,5,T,G,0.1614
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,3615230,14,1,1,T,G,0.1421
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,0,1,1,T,G,0.3647
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,1,1,18,T,G,0.1638
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,2,17,205,T,G,0.1533
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,3,119,6331,T,G,0.1859
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,4,4982,388524,T,G,0.8059
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,5,238283,15544432,T,G,11.4861
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,6,2094725,54047966,T,G,34.5092
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,7,2037625,13751785,T,G,19.6870
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,8,409465,1765279,T,G,3.5703
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,9,51233,163233,T,G,0.6272
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,10,6373,20245,T,G,0.2336
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,11,905,2320,T,G,0.1882
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,12,201,954,T,G,0.1871
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,13,21,73,T,G,0.1622
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,4707004,14,2,2,T,G,0.1483
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,0,1,1,T,G,0.3443
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,1,1,72,T,G,0.1685
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,2,71,4165,T,G,0.1818
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,3,3167,295684,T,G,0.6891
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,4,200808,15374187,T,G,11.1755
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,5,2051902,54057523,T,G,34.2980
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,6,2088464,14305613,T,G,20.4543
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,7,438457,1475114,T,G,3.7685
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,8,53366,157302,T,G,0.6245
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,9,6546,18443,T,G,0.2532
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,10,979,2486,T,G,0.2015
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,11,181,766,T,G,0.1868
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,12,8,10,T,G,0.1630
+soc-LiveJournal1,random,gpu_edge,tg=256 ept=2,2154062,13,2,2,T,G,0.1525

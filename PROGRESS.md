@@ -4,8 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 8 complete** (2026-10-19). Waiting for approval to start Phase 9.
-- Next: Phase 9 (vertex reordering: random, degree, RCM; locality metrics).
+- **Phase 9 complete** (2026-10-19). Waiting for approval to start Phase 10.
+- Next: Phase 10 (full benchmark run on AC with other apps closed, figures, report).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
   dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
@@ -603,3 +603,110 @@ The three bottom-up levels examine **17M adjacency entries instead of 82M** (ear
 **Open issues / notes**
 - The Orkut `gpu_pull_vector` fixed-mode run (57.9 ms/iteration) was slower than its own tol-mode run (49.7 ms/iteration, which includes the diff kernel). I suspect a sustained-load or thermal effect on battery (the fixed run is one 1.2 s command buffer). Recheck on AC in Phase 10.
 - All Phase 8 timings were measured on battery (Low Power Mode off). Rerun on AC in Phase 10.
+
+### 2026-10-19 · Phase 9: vertex reordering
+
+**Built**
+- `src/graph/reorder.{hpp,cpp}` (`graph::reorder`): `compute(sym, ordering)` returns perm[old] = new for each ordering:
+  - `original`: identity
+  - `random`: Fisher–Yates, fixed seed
+  - `degree`: descending degree, stable
+  - `rcm`: Reverse Cuthill–McKee. Per component: start at the lowest-degree unvisited vertex, refine once to the lowest-degree vertex of the farthest BFS level (GPS-style pseudo-peripheral start), visit neighbors in ascending degree, then reverse the whole order.
+
+  Also `isPermutation` and `locality()` (mean |u−v| over adjacency entries, and the fraction of entries with u/64 == v/64).
+- `graph::permute(g, perm)` in `transform`: relabels rows and columns and re-sorts lists (parallel over rows).
+- **gbench `--ordering`** for BFS and PageRank, plus `--locality-csv`.
+  - Orderings are computed on the symmetrized graph; PageRank permutes the directed graph with the same perm.
+  - **Validation in original IDs:** the reference runs on the *original* graph with the original source, and the result on the relabeled graph is mapped back (`dist_orig[v] = dist_run[perm[v]]`, same for ranks). Sources and TEPS denominators are identical across orderings.
+  - Memory (Orkut): the PageRank reference is computed before building the relabeled graph, and the relabeled host copy is dropped after the GPU upload. Peak RSS for the whole sweep is 2.69 GB, under the 3 GB limit.
+- `scripts/bench_reorder.sh` → `results/reorder_bfs.csv`, `results/reorder_pr.csv`, `results/reorder_locality.csv`, `results/trace_reorder_access.csv`. Extra traces: `results/trace_reorder_hybrid.csv`.
+- **Tests: 24/24.** New:
+  - `reorder_valid_and_results_map_back`: every ordering on every synthetic graph is a permutation; permute + inverse restores the graph exactly; BFS distances map back exactly; PageRank ranks map back to rounding (1e-12 relative).
+  - `reorder_locality_known_answers`: RCM recovers a randomly labeled path exactly (mean gap 1.0); degree order puts the star's hub at id 0; random labels raise a grid's mean gap >10×.
+
+**Validation:** all 76 runs (6 datasets × 4 orderings × {hybrid BFS, `gpu_pull_vector`, `gpu_pull_adaptive`}, plus the access-order runs) pass after mapping back to original IDs. AC power, Low Power Mode off.
+
+**Locality metrics** (`results/reorder_locality.csv`, symmetrized graph; mean |u−v| / % of entries within one 64-vertex block)
+
+| dataset | original | random | degree | rcm |
+|---|---|---|---|---|
+| ego-Facebook | 289 / 9.3% | 1344 / 1.5% | 546 / 7.1% | 210 / **19.8%** |
+| web-Google | 296K / 0.008% | 292K / 0.008% | 204K / 0.13% | 87K / **14.2%** |
+| roadNet-CA | 4.1K / **61.5%** | 655K / 0.003% | 416K / 33.0% | **3.0K** / 12.6% |
+| soc-Pokec | 305K / 0.79% | 544K / 0.004% | 292K / 0.06% | 322K / **1.68%** |
+| soc-LiveJournal1 | 754K / **7.1%** | 1.62M / 0.001% | 660K / 0.61% | 774K / 5.9% |
+| com-Orkut | 632K / 1.94% | 1.02M / 0.002% | 573K / 0.08% | 643K / 1.92% |
+
+**web-Google's SNAP labels are effectively random** (same locality as `random`), so original ≈ random there. roadNet-CA's original order is already highly local, and its same-block fraction even beats RCM's. RCM's computation time ranges from 1 ms (ego-Facebook) to 1.6 s (Orkut), untimed.
+
+**Results** (median: BFS e2e ms, 64 sources × 5 trials; PageRank ms/iteration, 20 iterations × 5 trials)
+
+BFS (`hybrid`, T = 1e5):
+
+| dataset | original | random | degree | rcm | best vs original | best vs random |
+|---|---|---|---|---|---|---|
+| ego-Facebook | **0.85** | 0.86 | 0.99 | 1.07 | original 1.00× | 1.02× |
+| web-Google | 6.69 | 6.35 | 4.94 | **4.69** | rcm 1.43× | 1.36× |
+| roadNet-CA | 22.2 | 38.3 | 22.5 | **19.8** | rcm 1.12× | 1.93× |
+| soc-Pokec | 4.67 | 5.73 | **4.60** | 5.80 | degree 1.02× | 1.25× |
+| soc-LiveJournal1 | **8.64** | 15.9 | 9.57 | 12.2 | original 1.00× | 1.84× |
+| com-Orkut | **12.8** | 17.4 | 13.1 | 20.3 | original 1.00× | 1.37× |
+
+PageRank `gpu_pull_vector`:
+
+| dataset | original | random | degree | rcm | best vs original | best vs random |
+|---|---|---|---|---|---|---|
+| ego-Facebook | **0.044** | 0.070 | 0.048 | 0.051 | original 1.00× | 1.59× |
+| web-Google | 1.43 | 1.48 | 1.25 | **1.10** | rcm 1.30× | 1.35× |
+| roadNet-CA | **2.23** | 2.69 | 2.33 | 2.29 | original 1.00× | 1.21× |
+| soc-Pokec | 6.89 | 11.1 | 6.94 | **5.76** | rcm 1.20× | 1.93× |
+| soc-LiveJournal1 | 14.9 | 38.2 | 20.6 | **13.6** | rcm 1.10× | 2.80× |
+| com-Orkut | 49.2 | 107.0 | 63.6 | **44.2** | rcm 1.11× | 2.42× |
+
+PageRank `gpu_pull_adaptive`:
+
+| dataset | original | random | degree | rcm | best vs original | best vs random |
+|---|---|---|---|---|---|---|
+| ego-Facebook | 0.059 | 0.080 | 0.065 | **0.057** | rcm 1.05× | 1.41× |
+| web-Google | 1.56 | 1.60 | 0.94 | **0.67** | rcm **2.32×** | 2.37× |
+| roadNet-CA | 0.894 | 2.70 | 1.11 | **0.890** | rcm 1.00× | **3.03×** |
+| soc-Pokec | 7.37 | 11.7 | 7.06 | **6.03** | rcm 1.22× | 1.94× |
+| soc-LiveJournal1 | 15.3 | 40.2 | 20.2 | **14.5** | rcm 1.06× | 2.78× |
+| com-Orkut | 50.3 | 102.7 | 63.4 | **44.6** | rcm 1.13× | 2.30× |
+
+**Interpretation**
+- **The input orderings already carry most of the locality.** Random labels slow PageRank 2.3–2.8× on LiveJournal and Orkut and 3.0× on roadNet-CA (adaptive), and BFS 1.4–1.9×. Gathers drop from ~4.6 to ~1.8 G/s on LiveJournal, which is close to the Phase 3 uniform-random rate for a 19 MB table (1.1–1.6 G/s). That confirms Phase 8's point: the 2.5–4× above-random gather rate came from the ordering.
+- **RCM is the best ordering for PageRank:** 1.06–1.22× on the social graphs and up to **2.32×** on web-Google, whose original labels are random. There, `gpu_pull_adaptive` reaches 71 GB/s effective (75% of sequential), vs 31 GB/s with original labels. On roadNet-CA, RCM merely ties the already-local original order.
+- **Degree ordering hurts PageRank on the community-structured social graphs** (LiveJournal 0.72–0.76×, Orkut 0.77–0.79×). Grouping hubs breaks up community locality (LiveJournal same-block 7.1% → 0.6%). It helps only web-Google (1.14–1.66×), which had no locality to lose.
+- **BFS behaves differently: RCM hurts direction-optimizing BFS on social graphs** (LiveJournal 0.71×, Orkut 0.63×, Pokec 0.81×) while helping web-Google (1.43×) and roadNet-CA (1.12×). The cause (verified with traces, `results/trace_reorder_hybrid.csv`, LiveJournal, 8 sources, medians):
+
+  | ordering | bottom-up edges examined | bottom-up ms | top-down edges | top-down ms |
+  |---|---|---|---|---|
+  | original | 22.2M | 7.8 | 1.46M | 2.1 |
+  | degree | **21.8M** | **7.3** | 1.46M | 2.4 |
+  | random | 28.5M | 11.6 | 1.46M | 3.4 |
+  | rcm | **44.3M** | 10.1 | 1.46M | 1.9 |
+
+  Bottom-up stops at the first neighbor in the frontier, and adjacency lists are sorted by ID. So **neighbor order decides how early the scan hits.** Original social labels and degree order put early and high-degree vertices at low IDs; they join the frontier early, so scans hit quickly. RCM gives the lowest IDs to the peripheral vertices visited last, and **bottom-up examines 2× more edges**. Top-down work is ordering-independent (it examines every frontier edge), and RCM even makes it the fastest (1.9 ms) through locality. For BFS, an ordering's effect on early exit can outweigh its locality effect. A hub-first neighbor order inside each list, independent of the vertex labels, would get both; noted for later, not done.
+- **No ordering is best for both algorithms:** PageRank wants RCM, direction-optimizing BFS wants hub-first labels (original/degree). On web-Google and roadNet-CA, RCM wins both.
+
+**Phase 5 open question (why `gpu_vertex` beat queue variants on late levels): mostly answered** (`results/trace_reorder_access.csv`, LiveJournal, 4 sources, per-level medians in ms)
+
+| level | gpu_edge original | gpu_vertex original | gpu_edge random | gpu_vertex random |
+|---|---|---|---|---|
+| 5 | 16.7 | **11.1** | 30.3 | 27.1 |
+| 6 | 12.7 | **5.1** | 24.4 | 13.0 |
+| total | 38.3 | 31.1 | 72.7 | 69.4 |
+
+- **Level 5:** `gpu_vertex`'s 1.5× advantage almost disappears under random labels (1.12×). So it came mostly from the input ordering's locality, which ID-order traversal exploits.
+- **Level 6:** the ~1.9× advantage survives random labels. That is consistent with an effect no relabeling can remove: `gpu_vertex` always streams `col_idx` in storage order (thread v reads row v), while queue variants read rows in discovery order. Plausible, not proven.
+- Overall, `gpu_vertex`'s lead shrinks from 7.2 ms to 3.3 ms under random labels.
+
+**Decisions**
+- Orderings are computed on the symmetrized graph, and the same perm is used for PageRank's directed graph.
+- Relabeling and RCM are preprocessing, excluded from timing (RCM up to 1.6 s on Orkut, recorded in the locality CSV).
+- Validation always uses original-label references; results are mapped back.
+
+**Open issues / notes**
+- Hub-first ordering *within* adjacency lists (keeping vertex labels) could combine RCM's PageRank locality with fast bottom-up exits. Not done; outside the PLAN.
+- Swap was ~6 GB used with other apps open; Phase 10 should run with apps closed.

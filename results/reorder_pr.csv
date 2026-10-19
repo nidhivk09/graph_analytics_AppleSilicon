@@ -1,0 +1,241 @@
+timestamp,git_commit,chip,dataset,n,m,ordering,algo,variant,params,source,trial,time_ms_e2e,time_ms_gpu,gteps,iters,validated,load1
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_vector,iters=20 tg=256,,0,0.9194,0.6699,3.838693,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_vector,iters=20 tg=256,,1,0.9337,0.6711,3.779770,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_vector,iters=20 tg=256,,2,0.8570,0.6674,4.118475,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_vector,iters=20 tg=256,,3,0.8795,0.6660,4.012916,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_vector,iters=20 tg=256,,4,0.8427,0.6647,4.188326,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,1.5407,0.9696,2.290739,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,1.1902,0.9594,2.965433,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,1.1710,0.9627,3.013863,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,1.1884,0.9628,2.969802,20,1,3.50
+2026-10-19T16:13:34,e906338+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,1.1831,0.9637,2.983083,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_vector,iters=20 tg=256,,0,4.1831,3.8145,0.843714,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_vector,iters=20 tg=256,,1,1.3950,1.2125,2.530083,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_vector,iters=20 tg=256,,2,1.3971,1.2056,2.526159,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_vector,iters=20 tg=256,,3,1.3845,1.2042,2.549117,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_vector,iters=20 tg=256,,4,1.3853,1.2115,2.547814,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,1.7581,1.3913,2.007504,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,1.5740,1.3910,2.242287,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,1.7430,1.4919,2.024877,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,1.5905,1.3926,2.219083,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,1.5915,1.3900,2.217574,20,1,3.50
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_vector,iters=20 tg=256,,0,1.1313,0.7880,3.119647,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_vector,iters=20 tg=256,,1,0.9651,0.7793,3.656894,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_vector,iters=20 tg=256,,2,0.9549,0.7799,3.695986,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_vector,iters=20 tg=256,,3,0.9637,0.7810,3.662427,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_vector,iters=20 tg=256,,4,0.9714,0.7789,3.633208,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,1.4026,1.1153,2.516253,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,1.3065,1.1077,2.701299,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,1.2993,1.1090,2.716284,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,1.2883,1.1097,2.739478,20,1,3.30
+2026-10-19T16:13:35,e906338+,Apple M2,ego-Facebook,4039,176468,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,1.3659,1.1135,2.583955,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_vector,iters=20 tg=256,,0,1.2537,0.8099,2.815135,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_vector,iters=20 tg=256,,1,1.0101,0.7987,3.493983,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_vector,iters=20 tg=256,,2,1.0236,0.8056,3.447903,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_vector,iters=20 tg=256,,3,2.3862,2.1683,1.479092,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_vector,iters=20 tg=256,,4,1.0063,0.8018,3.507149,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,1.3955,0.9379,2.529177,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,1.1283,0.9288,3.128056,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,1.1217,0.9275,3.146531,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,1.1381,0.9318,3.101030,20,1,3.30
+2026-10-19T16:13:36,e906338+,Apple M2,ego-Facebook,4039,176468,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,1.1323,0.9357,3.116892,20,1,3.30
+2026-10-19T16:13:41,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_vector,iters=20 tg=256,,0,28.5685,28.0580,3.573894,20,1,3.19
+2026-10-19T16:13:41,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_vector,iters=20 tg=256,,1,28.5075,28.0554,3.581536,20,1,3.19
+2026-10-19T16:13:41,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_vector,iters=20 tg=256,,2,28.5335,28.0514,3.578277,20,1,3.19
+2026-10-19T16:13:41,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_vector,iters=20 tg=256,,3,29.0170,28.4775,3.518649,20,1,3.19
+2026-10-19T16:13:41,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_vector,iters=20 tg=256,,4,28.5570,28.0338,3.575328,20,1,3.19
+2026-10-19T16:13:42,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,31.4183,30.8707,3.249724,20,1,3.19
+2026-10-19T16:13:42,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,31.4379,30.8812,3.247700,20,1,3.19
+2026-10-19T16:13:42,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,31.2295,30.7058,3.269365,20,1,3.19
+2026-10-19T16:13:42,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,31.1603,30.6830,3.276631,20,1,3.19
+2026-10-19T16:13:42,e906338+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,31.1812,30.6730,3.274433,20,1,3.19
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_vector,iters=20 tg=256,,0,29.7282,29.2054,3.434479,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_vector,iters=20 tg=256,,1,29.6744,29.1843,3.440705,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_vector,iters=20 tg=256,,2,29.6807,29.1992,3.439966,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_vector,iters=20 tg=256,,3,29.6698,29.1829,3.441242,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_vector,iters=20 tg=256,,4,29.6999,29.2057,3.437751,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,32.1610,31.6193,3.174673,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,32.0201,31.4890,3.188644,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,31.9449,31.4705,3.196155,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,31.9940,31.4720,3.191252,20,1,3.02
+2026-10-19T16:13:48,e906338+,Apple M2,web-Google,875713,5105039,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,31.9835,31.4731,3.192299,20,1,3.02
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_vector,iters=20 tg=256,,0,25.0672,24.5676,4.073081,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_vector,iters=20 tg=256,,1,25.0396,24.5278,4.077568,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_vector,iters=20 tg=256,,2,25.0306,24.5619,4.079034,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_vector,iters=20 tg=256,,3,25.0140,24.5398,4.081745,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_vector,iters=20 tg=256,,4,25.0630,24.6082,4.073772,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,18.8299,18.3076,5.422276,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,18.8525,18.3497,5.415769,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,18.8372,18.3519,5.420165,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,18.7551,18.2957,5.443887,20,1,2.94
+2026-10-19T16:13:54,e906338+,Apple M2,web-Google,875713,5105039,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,18.7882,18.3323,5.434313,20,1,2.94
+2026-10-19T16:13:59,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_vector,iters=20 tg=256,,0,22.0485,21.5418,4.630727,20,1,2.94
+2026-10-19T16:13:59,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_vector,iters=20 tg=256,,1,22.0576,21.5770,4.628820,20,1,2.94
+2026-10-19T16:13:59,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_vector,iters=20 tg=256,,2,22.0466,21.5875,4.631130,20,1,2.94
+2026-10-19T16:13:59,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_vector,iters=20 tg=256,,3,22.0488,21.5774,4.630675,20,1,2.94
+2026-10-19T16:13:59,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_vector,iters=20 tg=256,,4,22.0180,21.5228,4.637159,20,1,2.94
+2026-10-19T16:14:00,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,13.4834,12.9615,7.572346,20,1,2.95
+2026-10-19T16:14:00,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,13.4744,12.9026,7.577381,20,1,2.95
+2026-10-19T16:14:00,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,13.4794,13.0207,7.574569,20,1,2.95
+2026-10-19T16:14:00,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,13.5348,13.0385,7.543603,20,1,2.95
+2026-10-19T16:14:00,e906338+,Apple M2,web-Google,875713,5105039,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,13.9263,13.4582,7.331512,20,1,2.95
+2026-10-19T16:14:12,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_vector,iters=20 tg=256,,0,44.4660,43.9750,2.488739,20,1,3.04
+2026-10-19T16:14:12,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_vector,iters=20 tg=256,,1,44.4688,43.9705,2.488581,20,1,3.04
+2026-10-19T16:14:12,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_vector,iters=20 tg=256,,2,44.7212,44.2320,2.474539,20,1,3.04
+2026-10-19T16:14:12,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_vector,iters=20 tg=256,,3,44.6506,44.1368,2.478449,20,1,3.04
+2026-10-19T16:14:12,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_vector,iters=20 tg=256,,4,44.7672,43.9777,2.471992,20,1,3.04
+2026-10-19T16:14:13,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,18.1554,17.6463,6.095400,20,1,3.04
+2026-10-19T16:14:13,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,17.6875,17.1705,6.256623,20,1,3.04
+2026-10-19T16:14:13,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,17.6706,17.1866,6.262613,20,1,3.04
+2026-10-19T16:14:13,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,17.8885,17.4205,6.186336,20,1,3.04
+2026-10-19T16:14:13,e906338+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,18.0569,17.5878,6.128637,20,1,3.04
+2026-10-19T16:14:32,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_vector,iters=20 tg=256,,0,53.8780,53.3905,2.053981,20,1,3.37
+2026-10-19T16:14:32,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_vector,iters=20 tg=256,,1,54.2097,53.7149,2.041409,20,1,3.37
+2026-10-19T16:14:32,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_vector,iters=20 tg=256,,2,53.8622,53.3756,2.054583,20,1,3.37
+2026-10-19T16:14:32,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_vector,iters=20 tg=256,,3,53.7399,53.2672,2.059258,20,1,3.37
+2026-10-19T16:14:32,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_vector,iters=20 tg=256,,4,53.9007,53.3204,2.053115,20,1,3.37
+2026-10-19T16:14:33,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,54.0148,53.5090,2.048777,20,1,3.37
+2026-10-19T16:14:33,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,54.1120,53.5722,2.045098,20,1,3.37
+2026-10-19T16:14:33,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,53.8994,53.3495,2.053163,20,1,3.37
+2026-10-19T16:14:33,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,53.8741,53.3736,2.054128,20,1,3.37
+2026-10-19T16:14:33,e906338+,Apple M2,roadNet-CA,1965206,5533214,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,54.1988,53.7086,2.041820,20,1,3.37
+2026-10-19T16:14:46,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_vector,iters=20 tg=256,,0,46.5680,46.0011,2.376404,20,1,3.57
+2026-10-19T16:14:46,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_vector,iters=20 tg=256,,1,46.4987,46.0294,2.379945,20,1,3.57
+2026-10-19T16:14:46,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_vector,iters=20 tg=256,,2,46.5842,46.1088,2.375577,20,1,3.57
+2026-10-19T16:14:46,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_vector,iters=20 tg=256,,3,46.4380,45.9256,2.383052,20,1,3.57
+2026-10-19T16:14:46,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_vector,iters=20 tg=256,,4,46.5624,46.0883,2.376687,20,1,3.57
+2026-10-19T16:14:47,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,22.3450,21.8414,4.952530,20,1,3.57
+2026-10-19T16:14:47,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,22.0158,21.5156,5.026577,20,1,3.57
+2026-10-19T16:14:47,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,22.0589,21.5456,5.016759,20,1,3.57
+2026-10-19T16:14:47,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,22.1447,21.6469,4.997324,20,1,3.57
+2026-10-19T16:14:47,e906338+,Apple M2,roadNet-CA,1965206,5533214,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,22.1201,21.5532,5.002887,20,1,3.57
+2026-10-19T16:14:59,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_vector,iters=20 tg=256,,0,45.7702,45.1955,2.417821,20,1,3.79
+2026-10-19T16:14:59,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_vector,iters=20 tg=256,,1,46.8588,46.1279,2.361657,20,1,3.79
+2026-10-19T16:14:59,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_vector,iters=20 tg=256,,2,45.6156,45.1044,2.426019,20,1,3.79
+2026-10-19T16:14:59,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_vector,iters=20 tg=256,,3,45.6406,45.1374,2.424690,20,1,3.79
+2026-10-19T16:14:59,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_vector,iters=20 tg=256,,4,45.7075,45.2205,2.421141,20,1,3.79
+2026-10-19T16:15:00,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,17.8076,17.3283,6.214447,20,1,3.79
+2026-10-19T16:15:00,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,17.7047,17.1398,6.250571,20,1,3.79
+2026-10-19T16:15:00,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,17.6426,17.1414,6.272552,20,1,3.79
+2026-10-19T16:15:00,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,17.9127,17.4073,6.177962,20,1,3.79
+2026-10-19T16:15:00,e906338+,Apple M2,roadNet-CA,1965206,5533214,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,18.3729,17.9175,6.023242,20,1,3.79
+2026-10-19T16:15:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_vector,iters=20 tg=256,,0,137.7372,137.2040,4.446519,20,1,3.83
+2026-10-19T16:15:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_vector,iters=20 tg=256,,1,139.5840,139.0326,4.387691,20,1,3.83
+2026-10-19T16:15:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_vector,iters=20 tg=256,,2,137.8548,137.3377,4.442728,20,1,3.83
+2026-10-19T16:15:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_vector,iters=20 tg=256,,3,139.2219,138.6999,4.399101,20,1,3.83
+2026-10-19T16:15:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_vector,iters=20 tg=256,,4,137.7020,137.1635,4.447656,20,1,3.83
+2026-10-19T16:15:16,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,147.5187,146.9637,4.151687,20,1,5.29
+2026-10-19T16:15:16,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,147.3757,146.8460,4.155714,20,1,5.29
+2026-10-19T16:15:16,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,147.3890,146.8776,4.155340,20,1,5.29
+2026-10-19T16:15:16,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,147.4805,146.8780,4.152762,20,1,5.29
+2026-10-19T16:15:16,e906338+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,147.3889,146.8558,4.155342,20,1,5.29
+2026-10-19T16:15:33,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_vector,iters=20 tg=256,,0,222.0492,221.5049,2.758179,20,1,4.63
+2026-10-19T16:15:33,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_vector,iters=20 tg=256,,1,222.0415,221.5071,2.758273,20,1,4.63
+2026-10-19T16:15:33,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_vector,iters=20 tg=256,,2,222.0077,221.4684,2.758693,20,1,4.63
+2026-10-19T16:15:33,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_vector,iters=20 tg=256,,3,221.9636,221.4441,2.759242,20,1,4.63
+2026-10-19T16:15:33,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_vector,iters=20 tg=256,,4,222.1212,221.5731,2.757285,20,1,4.63
+2026-10-19T16:15:36,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,233.7192,233.1683,2.620458,20,1,4.42
+2026-10-19T16:15:36,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,233.6451,232.9572,2.621289,20,1,4.42
+2026-10-19T16:15:36,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,233.6455,233.0747,2.621284,20,1,4.42
+2026-10-19T16:15:36,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,233.4834,232.9536,2.623104,20,1,4.42
+2026-10-19T16:15:36,e906338+,Apple M2,soc-Pokec,1632803,30622564,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,233.4740,232.9146,2.623209,20,1,4.42
+2026-10-19T16:15:52,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_vector,iters=20 tg=256,,0,138.7718,138.2626,4.413369,20,1,4.09
+2026-10-19T16:15:52,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_vector,iters=20 tg=256,,1,138.6182,138.0854,4.418261,20,1,4.09
+2026-10-19T16:15:52,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_vector,iters=20 tg=256,,2,138.6206,138.1166,4.418183,20,1,4.09
+2026-10-19T16:15:52,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_vector,iters=20 tg=256,,3,139.2036,138.6877,4.399679,20,1,4.09
+2026-10-19T16:15:52,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_vector,iters=20 tg=256,,4,138.7591,138.1230,4.413773,20,1,4.09
+2026-10-19T16:15:54,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,141.2943,140.7656,4.334579,20,1,4.09
+2026-10-19T16:15:54,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,141.2739,140.7479,4.335204,20,1,4.09
+2026-10-19T16:15:54,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,141.2672,140.7120,4.335411,20,1,4.09
+2026-10-19T16:15:54,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,141.4290,140.8924,4.330449,20,1,4.09
+2026-10-19T16:15:54,e906338+,Apple M2,soc-Pokec,1632803,30622564,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,141.6958,141.1529,4.322296,20,1,4.09
+2026-10-19T16:16:12,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_vector,iters=20 tg=256,,0,115.1456,114.6058,5.318928,20,1,3.78
+2026-10-19T16:16:12,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_vector,iters=20 tg=256,,1,115.1339,114.5855,5.319469,20,1,3.78
+2026-10-19T16:16:12,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_vector,iters=20 tg=256,,2,115.1222,114.5471,5.320008,20,1,3.78
+2026-10-19T16:16:12,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_vector,iters=20 tg=256,,3,115.0040,114.4981,5.325480,20,1,3.78
+2026-10-19T16:16:12,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_vector,iters=20 tg=256,,4,114.9486,114.4194,5.328044,20,1,3.78
+2026-10-19T16:16:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,120.7980,120.2302,5.070047,20,1,3.78
+2026-10-19T16:16:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,120.7729,120.1927,5.071100,20,1,3.78
+2026-10-19T16:16:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,120.5862,120.0348,5.078950,20,1,3.78
+2026-10-19T16:16:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,120.4471,119.9152,5.084814,20,1,3.78
+2026-10-19T16:16:14,e906338+,Apple M2,soc-Pokec,1632803,30622564,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,120.4416,119.8922,5.085047,20,1,3.78
+2026-10-19T16:16:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_vector,iters=20 tg=256,,0,298.4843,297.7104,4.588207,20,1,2.85
+2026-10-19T16:16:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_vector,iters=20 tg=256,,1,301.9421,301.2322,4.535664,20,1,2.85
+2026-10-19T16:16:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_vector,iters=20 tg=256,,2,299.9568,299.4424,4.565683,20,1,2.85
+2026-10-19T16:16:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_vector,iters=20 tg=256,,3,286.0933,285.4863,4.786927,20,1,2.85
+2026-10-19T16:16:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_vector,iters=20 tg=256,,4,281.5980,281.0057,4.863344,20,1,2.85
+2026-10-19T16:16:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,307.6323,307.0886,4.451769,20,1,2.94
+2026-10-19T16:16:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,310.9859,310.3801,4.403762,20,1,2.94
+2026-10-19T16:16:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,305.2598,304.6477,4.486368,20,1,2.94
+2026-10-19T16:16:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,306.1123,305.5233,4.473873,20,1,2.94
+2026-10-19T16:16:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,303.4273,302.8512,4.513463,20,1,2.94
+2026-10-19T16:17:47,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_vector,iters=20 tg=256,,0,758.9695,758.4001,1.804431,20,1,11.33
+2026-10-19T16:17:47,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_vector,iters=20 tg=256,,1,794.9669,794.4560,1.722723,20,1,11.33
+2026-10-19T16:17:47,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_vector,iters=20 tg=256,,2,791.3338,790.6845,1.730632,20,1,11.33
+2026-10-19T16:17:47,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_vector,iters=20 tg=256,,3,763.3361,762.7300,1.794109,20,1,11.33
+2026-10-19T16:17:47,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_vector,iters=20 tg=256,,4,758.4212,757.7995,1.805735,20,1,11.33
+2026-10-19T16:17:57,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,794.0799,793.5384,1.724647,20,1,10.06
+2026-10-19T16:17:57,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,856.8970,856.3588,1.598218,20,1,10.06
+2026-10-19T16:17:57,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,830.6153,830.0458,1.648787,20,1,10.06
+2026-10-19T16:17:57,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,804.3935,803.7584,1.702535,20,1,10.06
+2026-10-19T16:17:57,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,799.4519,798.9003,1.713058,20,1,10.06
+2026-10-19T16:35:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_vector,iters=20 tg=256,,0,412.8856,412.3130,3.316918,20,1,21.37
+2026-10-19T16:35:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_vector,iters=20 tg=256,,1,411.9487,411.3481,3.324462,20,1,21.37
+2026-10-19T16:35:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_vector,iters=20 tg=256,,2,411.7476,411.0810,3.326086,20,1,21.37
+2026-10-19T16:35:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_vector,iters=20 tg=256,,3,416.1225,415.4661,3.291117,20,1,21.37
+2026-10-19T16:35:58,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_vector,iters=20 tg=256,,4,412.5462,411.8756,3.319647,20,1,21.37
+2026-10-19T16:36:05,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,407.5659,407.0214,3.360212,20,1,23.11
+2026-10-19T16:36:05,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,405.9515,405.3615,3.373575,20,1,23.11
+2026-10-19T16:36:05,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,401.7122,401.1195,3.409176,20,1,23.11
+2026-10-19T16:36:05,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,401.9796,401.2770,3.406909,20,1,23.11
+2026-10-19T16:36:05,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,403.2030,402.6121,3.396572,20,1,23.11
+2026-10-19T16:36:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_vector,iters=20 tg=256,,0,272.9655,272.4478,5.017145,20,1,12.52
+2026-10-19T16:36:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_vector,iters=20 tg=256,,1,272.0041,271.4028,5.034880,20,1,12.52
+2026-10-19T16:36:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_vector,iters=20 tg=256,,2,272.1805,271.5932,5.031616,20,1,12.52
+2026-10-19T16:36:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_vector,iters=20 tg=256,,3,272.1517,271.5931,5.032149,20,1,12.52
+2026-10-19T16:36:52,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_vector,iters=20 tg=256,,4,271.4852,270.9161,5.044503,20,1,12.52
+2026-10-19T16:37:00,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,291.7086,291.1942,4.694781,20,1,10.90
+2026-10-19T16:37:00,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,291.8582,291.5929,4.692374,20,1,10.90
+2026-10-19T16:37:00,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,289.0123,288.5070,4.738580,20,1,10.90
+2026-10-19T16:37:00,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,278.6957,278.0864,4.913990,20,1,10.90
+2026-10-19T16:37:00,e906338+,Apple M2,soc-LiveJournal1,4847571,68475391,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,278.0780,277.5262,4.924905,20,1,10.90
+2026-10-19T16:37:53,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_vector,iters=20 tg=256,,0,988.3718,987.1192,4.742551,20,1,6.42
+2026-10-19T16:37:53,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_vector,iters=20 tg=256,,1,982.2927,981.5672,4.771901,20,1,6.42
+2026-10-19T16:37:53,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_vector,iters=20 tg=256,,2,986.9237,986.3364,4.749509,20,1,6.42
+2026-10-19T16:37:53,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_vector,iters=20 tg=256,,3,983.0921,982.4770,4.768020,20,1,6.42
+2026-10-19T16:37:53,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_vector,iters=20 tg=256,,4,982.3637,981.8222,4.771556,20,1,6.42
+2026-10-19T16:38:07,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,1006.4802,1005.8738,4.657224,20,1,5.29
+2026-10-19T16:38:07,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,1006.0326,1005.4279,4.659296,20,1,5.29
+2026-10-19T16:38:07,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,1006.0531,1005.4855,4.659201,20,1,5.29
+2026-10-19T16:38:07,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,1016.1740,1015.4197,4.612796,20,1,5.29
+2026-10-19T16:38:07,e906338+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,1007.6224,1007.0384,4.651944,20,1,5.29
+2026-10-19T16:40:14,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_vector,iters=20 tg=256,,0,2628.6050,2625.9420,1.783229,20,1,18.32
+2026-10-19T16:40:14,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_vector,iters=20 tg=256,,1,2538.1975,2536.4984,1.846745,20,1,18.32
+2026-10-19T16:40:14,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_vector,iters=20 tg=256,,2,2116.7469,2116.0545,2.214437,20,1,18.32
+2026-10-19T16:40:14,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_vector,iters=20 tg=256,,3,2139.9030,2139.2234,2.190475,20,1,18.32
+2026-10-19T16:40:14,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_vector,iters=20 tg=256,,4,2082.9695,2082.3186,2.250347,20,1,18.32
+2026-10-19T16:40:38,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,2090.4275,2089.8150,2.242318,20,1,14.27
+2026-10-19T16:40:38,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,2053.2495,2052.5316,2.282920,20,1,14.27
+2026-10-19T16:40:38,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,2049.4700,2048.8725,2.287130,20,1,14.27
+2026-10-19T16:40:38,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,2112.5555,2111.9462,2.218831,20,1,14.27
+2026-10-19T16:40:38,e906338+,Apple M2,com-Orkut,3072441,234370166,random,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,2046.8474,2046.2052,2.290060,20,1,14.27
+2026-10-19T16:41:44,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_vector,iters=20 tg=256,,0,1275.3717,1274.7192,3.675323,20,1,6.56
+2026-10-19T16:41:44,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_vector,iters=20 tg=256,,1,1272.2371,1271.6431,3.684379,20,1,6.56
+2026-10-19T16:41:44,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_vector,iters=20 tg=256,,2,1271.7545,1271.2055,3.685777,20,1,6.56
+2026-10-19T16:41:44,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_vector,iters=20 tg=256,,3,1271.3237,1270.7721,3.687026,20,1,6.56
+2026-10-19T16:41:44,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_vector,iters=20 tg=256,,4,1276.1717,1275.6168,3.673019,20,1,6.56
+2026-10-19T16:42:01,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,1285.2978,1284.6000,3.646940,20,1,5.48
+2026-10-19T16:42:01,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,1265.0978,1264.4362,3.705171,20,1,5.48
+2026-10-19T16:42:01,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,1269.5342,1268.9619,3.692223,20,1,5.48
+2026-10-19T16:42:01,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,1266.4551,1265.9045,3.701200,20,1,5.48
+2026-10-19T16:42:01,e906338+,Apple M2,com-Orkut,3072441,234370166,degree,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,1268.4267,1267.8672,3.695447,20,1,5.48
+2026-10-19T16:43:08,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_vector,iters=20 tg=256,,0,882.4102,881.7930,5.312046,20,1,3.99
+2026-10-19T16:43:08,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_vector,iters=20 tg=256,,1,883.2535,882.6438,5.306974,20,1,3.99
+2026-10-19T16:43:08,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_vector,iters=20 tg=256,,2,884.5613,883.9443,5.299128,20,1,3.99
+2026-10-19T16:43:08,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_vector,iters=20 tg=256,,3,888.5005,887.9187,5.275634,20,1,3.99
+2026-10-19T16:43:08,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_vector,iters=20 tg=256,,4,893.5072,892.9180,5.246072,20,1,3.99
+2026-10-19T16:43:24,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,0,895.9068,895.1926,5.232021,20,1,3.48
+2026-10-19T16:43:24,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,1,892.6826,892.0202,5.250918,20,1,3.48
+2026-10-19T16:43:24,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,2,889.8859,889.2706,5.267421,20,1,3.48
+2026-10-19T16:43:24,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,3,891.3644,890.7780,5.258683,20,1,3.48
+2026-10-19T16:43:24,e906338+,Apple M2,com-Orkut,3072441,234370166,rcm,pr,gpu_pull_adaptive,iters=20 tg=256 small_max=16 large_min=256,,4,897.8134,897.2186,5.220911,20,1,3.48

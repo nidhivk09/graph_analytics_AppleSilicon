@@ -5,6 +5,7 @@
 #include "cpu/pagerank_cpu.hpp"
 #include "graph/csr.hpp"
 #include "graph/generators.hpp"
+#include "graph/reorder.hpp"
 #include "graph/snap.hpp"
 #include "graph/transform.hpp"
 #include "metal/bfs_gpu.hpp"
@@ -707,6 +708,65 @@ TEST(pagerank_variants_match_reference) {
                 }
         }
     }
+}
+
+// ---------------------------------------------------------------- Phase 9
+
+// Every ordering is a permutation; permute() then the inverse permutation
+// restores the graph exactly; BFS distances and PageRank ranks of the
+// relabeled graph map back (v -> perm[v]) to the original results.
+TEST(reorder_valid_and_results_map_back) {
+    for (auto& [name, stored] : graph::gen::suite()) {
+        CSR sym = graph::symmetrize(stored);
+        for (const char* ord : {"original", "random", "degree", "rcm"}) {
+            auto perm = graph::reorder::compute(sym, ord);
+            CHECK(graph::reorder::isPermutation(perm));
+            CSR p = graph::permute(stored, perm);
+            CHECK(graph::validate(p).empty());
+            std::vector<uint32_t> inv(perm.size());
+            for (size_t v = 0; v < perm.size(); ++v) inv[perm[v]] = (uint32_t)v;
+            CHECK(graph::equal(graph::permute(p, inv), stored));
+
+            CSR psym = graph::permute(sym, perm);
+            for (uint32_t src : testSources(sym)) {
+                auto ref = cpu::bfsSerial(sym, src);
+                auto got = cpu::bfsSerial(psym, perm[src]);
+                for (uint32_t v = 0; v < sym.n; ++v) CHECK(got[perm[v]] == ref[v]);
+            }
+            cpu::PrOptions o;
+            CSR in = stored.directed() ? graph::transpose(stored) : stored;
+            CSR pin = p.directed() ? graph::transpose(p) : p;
+            auto od = cpu::outDegrees(stored), pod = cpu::outDegrees(p);
+            std::vector<double> r(stored.n), pr(stored.n);
+            cpu::pagerankSerial(in, od.data(), r.data(), o);
+            cpu::pagerankSerial(pin, pod.data(), pr.data(), o);
+            // Summation order differs after relabeling: equal to rounding.
+            for (uint32_t v = 0; v < stored.n; ++v) CHECK(std::fabs(pr[perm[v]] - r[v]) <= 1e-12 * r[v] + 1e-18);
+        }
+    }
+}
+
+// Known locality answers: RCM recovers a path's natural order from a random
+// labeling (mean gap 1, i.e. every edge joins consecutive ids); degree order
+// puts the star's hub first; random labels destroy a grid's locality.
+TEST(reorder_locality_known_answers) {
+    CSR path = graph::gen::path(1000);
+    CSR shuffled = graph::permute(path, graph::reorder::compute(path, "random"));
+    CHECK(graph::reorder::locality(shuffled).meanGap > 100);
+    CSR rcm = graph::permute(shuffled, graph::reorder::compute(shuffled, "rcm"));
+    CHECK(std::fabs(graph::reorder::locality(rcm).meanGap - 1.0) < 1e-12);
+
+    CSR star = graph::gen::star(1000);
+    auto dp = graph::reorder::compute(star, "degree");
+    uint32_t hub = 0;
+    for (uint32_t v = 0; v < star.n; ++v) if (star.degree(v) > star.degree(hub)) hub = v;
+    CHECK(dp[hub] == 0);
+
+    CSR grid = graph::gen::grid2d(100, 100);
+    auto lg = graph::reorder::locality(grid);
+    auto lr = graph::reorder::locality(graph::permute(grid, graph::reorder::compute(grid, "random")));
+    CHECK(lr.meanGap > 10 * lg.meanGap);
+    CHECK(lr.sameBlock64 < lg.sameBlock64);
 }
 
 // ---------------------------------------------------------------- runner

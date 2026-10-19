@@ -44,6 +44,11 @@ set `GGPU_SHADER_DIR` to that directory.
 ./build/gbench --graph data/web-Google.bin --algo pr --variant gpu_push --tol 1e-6 --validate
 ./scripts/bench_pr.sh                          # all PageRank variants x datasets
 
+# Vertex orderings (original | random | degree | rcm), untimed relabeling; results
+# are validated in original ids. --locality-csv records mean |u-v| and same-64-block.
+./build/gbench --graph data/web-Google.bin --algo pr --variant gpu_pull_adaptive --ordering rcm --validate
+./scripts/bench_reorder.sh                     # orderings x datasets (BFS hybrid + PR)
+
 .venv/bin/python tools/validate_networkx.py   # cpu_serial BFS + PageRank vs NetworkX
 ./scripts/scaling_cpu.sh                       # OpenMP schedule x thread-count sweep
 ```

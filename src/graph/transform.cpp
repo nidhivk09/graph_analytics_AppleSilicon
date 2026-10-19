@@ -1,5 +1,7 @@
 #include "graph/transform.hpp"
 
+#include <algorithm>
+#include <stdexcept>
 #include <vector>
 
 namespace graph {
@@ -52,6 +54,25 @@ CSR symmetrize(const CSR& g) {
     for (int64_t v = 0; v < n; ++v) mergeInto(v, ci.data() + rp[v]);
 
     return CSR::fromVectors(std::move(rp), std::move(ci), kFlagSorted | kFlagDedup);
+}
+
+CSR permute(const CSR& g, const std::vector<uint32_t>& perm) {
+    const uint64_t n = g.n;
+    if (perm.size() != n) throw std::runtime_error("permute: perm size != n");
+    std::vector<uint32_t> inv(n);
+    for (uint64_t v = 0; v < n; ++v) inv[perm[v]] = (uint32_t)v;
+    std::vector<uint32_t> rp(n + 1, 0);
+    for (uint64_t nv = 0; nv < n; ++nv) rp[nv + 1] = rp[nv] + g.degree(inv[nv]);
+    std::vector<uint32_t> ci(g.m);
+    // Each new row is independent: relabel and sort in parallel.
+#pragma omp parallel for schedule(dynamic, 1024)
+    for (uint64_t nv = 0; nv < n; ++nv) {
+        uint32_t* out = ci.data() + rp[nv];
+        uint32_t k = 0;
+        for (const uint32_t* p = g.begin(inv[nv]); p != g.end(inv[nv]); ++p) out[k++] = perm[*p];
+        std::sort(out, out + k);
+    }
+    return CSR::fromVectors(std::move(rp), std::move(ci), g.flags);
 }
 
 } // namespace graph
