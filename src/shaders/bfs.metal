@@ -355,3 +355,70 @@ kernel void bfs_edge_expand(device const uint* row_ptr  [[buffer(0)]],
         add_next_edges(claimed, udeg, stats, lane);
     }
 }
+
+// ===========================================================================
+// Phase 6: direction-optimizing BFS (gpu_do). Top-down levels reuse
+// bfs_edge_expand; bottom-up levels use the kernel below on bitmap frontiers.
+
+// deg[i] = degree(queue[i]): rebuilds gpu_edge's scan input when switching
+// back to top-down (the queue then comes from bitmap_to_queue, which does not
+// record degrees).
+kernel void bfs_queue_degrees(device const uint* row_ptr [[buffer(0)]],
+                              device const uint* queue   [[buffer(1)]],
+                              device uint* deg           [[buffer(2)]],
+                              constant uint& size        [[buffer(3)]],
+                              uint gid [[thread_position_in_grid]])
+{
+    if (gid >= size) return;
+    uint v = queue[gid];
+    deg[gid] = row_ptr[v + 1] - row_ptr[v];
+}
+
+// Bottom-up step: thread per vertex. An unvisited vertex scans its neighbors
+// and stops at the first one in the frontier bitmap (it only needs one
+// parent). The random reads go to the bitmap (n/8 bytes: 600 KB for
+// LiveJournal, cache-resident) instead of the 19 MB dist array.
+// No CAS is needed: only vertex v's own thread writes dist[v].
+//
+// Next frontier: the 32 lanes of a simdgroup are 32 consecutive vertices
+// gid & ~31 .. +31 (1D threadgroups, multiples of 32), which is exactly one
+// bitmap word. simd_or assembles the word and lane 0 stores it: no atomics,
+// and every word is overwritten, so `next` needs no clearing.
+// Stats: STAT_FOUND = vertices found (next frontier size), STAT_EDGES =
+// adjacency entries examined, STAT_NEXT_EDGES = their degrees (the next
+// top-down level's edge count, if the heuristic switches back).
+kernel void bfs_bottom_up(device const uint* row_ptr [[buffer(0)]],
+                          device const uint* col_idx [[buffer(1)]],
+                          device uint* dist          [[buffer(2)]],
+                          device const uint* front   [[buffer(3)]],
+                          device uint* next          [[buffer(4)]],
+                          device atomic_uint* stats  [[buffer(5)]],
+                          constant uint& n           [[buffer(6)]],
+                          constant uint& level       [[buffer(7)]],
+                          uint gid  [[thread_position_in_grid]],
+                          uint lane [[thread_index_in_simdgroup]])
+{
+    bool found = false;
+    uint examined = 0, ndeg = 0;
+    if (gid < n && dist[gid] == INF_DIST) {
+        uint begin = row_ptr[gid], end = row_ptr[gid + 1];
+        for (uint e = begin; e < end; ++e) {
+            ++examined;
+            uint u = col_idx[e];
+            if ((front[u >> 5] >> (u & 31)) & 1u) { found = true; break; }  // early exit
+        }
+        if (found) {
+            dist[gid] = level + 1;
+            ndeg = end - begin;
+        }
+    }
+    // No early return above: every lane reaches the simdgroup operations.
+    uint word = simd_or(found ? (1u << lane) : 0u);
+    if (lane == 0 && gid < n) next[gid >> 5] = word;
+    uint f = simd_sum(found ? 1u : 0u), x = simd_sum(examined), d = simd_sum(ndeg);
+    if (lane == 0) {
+        if (f) atomic_fetch_add_explicit(&stats[STAT_FOUND], f, memory_order_relaxed);
+        if (x) atomic_fetch_add_explicit(&stats[STAT_EDGES], x, memory_order_relaxed);
+        if (d) atomic_fetch_add_explicit(&stats[STAT_NEXT_EDGES], d, memory_order_relaxed);
+    }
+}

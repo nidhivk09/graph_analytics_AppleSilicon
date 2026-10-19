@@ -25,7 +25,9 @@ struct GpuBfsOptions {
     // Defaults from the Phase 5 sweep (results/sweep_bfs_balanced.csv).
     uint32_t smallMax = 16;     // gpu_binned: degree <  smallMax -> thread per vertex
     uint32_t largeMin = 256;    // gpu_binned: degree >= largeMin -> threadgroup per vertex
-    uint32_t ept = 2;           // gpu_edge: edges per thread
+    uint32_t ept = 2;           // gpu_edge (and gpu_do top-down): edges per thread
+    double alpha = 15.0;        // gpu_do: go bottom-up if m_f > m_u / alpha (GAP heuristic)
+    double beta = 18.0;         // gpu_do: back to top-down when frontier shrinks below n / beta
 };
 
 class GpuBfs {
@@ -48,6 +50,10 @@ public:
     // gpu_edge: scan of frontier degrees, then a fixed number of edges per thread.
     void runEdge(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
                  std::vector<util::BfsLevel>* trace = nullptr);
+    // gpu_do: direction-optimizing; top-down = gpu_edge, bottom-up = bitmap
+    // frontier with early exit; same switching rule as cpu::bfsDO.
+    void runDO(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
+               std::vector<util::BfsLevel>* trace = nullptr);
 
     // Kernel-only time of the last run: sum of GPUEndTime - GPUStartTime over
     // its command buffers (excludes the host round trip between levels).
@@ -63,6 +69,12 @@ private:
     // Commit, wait, check, accumulate GPU time.
     void endLevel(id<MTLCommandBuffer> cb, id<MTLComputeCommandEncoder> enc);
     static uint32_t checkTg(uint32_t tg);
+    // gpu_edge's level: scan degrees in place, then expand. total > 0.
+    void encodeEdgeLevel(id<MTLComputeCommandEncoder> enc, id<MTLBuffer> q, id<MTLBuffer> deg,
+                         id<MTLBuffer> qNext, id<MTLBuffer> degNext, uint32_t size, uint64_t total,
+                         uint32_t level, uint32_t tg, uint32_t ept);
+    uint32_t edgeTg(const GpuBfsOptions& opt) const;
+    void ensureEdgeBuffers();
 
     MetalContext& ctx_;
     graph::CSR view_;
@@ -71,8 +83,10 @@ private:
     id<MTLBuffer> queueA_, queueB_;  // gpu_naive / gpu_edge frontiers, allocated on first use
     id<MTLBuffer> degA_, degB_;      // gpu_edge: degrees next to the queue entries (scanned in place)
     id<MTLBuffer> bins_[2][3];       // gpu_binned: [current/next][small/medium/large]
+    id<MTLBuffer> frontBm_, nextBm_, bmCount_;  // gpu_do: bitmap frontiers, bitmapToQueue count
     id<MTLComputePipelineState> init_, vertexLevel_, naiveLevel_;
     id<MTLComputePipelineState> binSmall_, binMedium_, binLarge_, edgeExpand_;
+    id<MTLComputePipelineState> queueDegrees_, bottomUp_;
     std::unique_ptr<Primitives> prims_;
     double lastGpuMs_ = 0;
     uint32_t lastLevels_ = 0;

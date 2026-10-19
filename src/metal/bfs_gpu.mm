@@ -65,6 +65,8 @@ GpuBfs::GpuBfs(MetalContext& ctx, const graph::CSR& g) : ctx_(ctx), n_((uint32_t
     binMedium_ = ctx.pipeline("bfs", "bfs_binned_medium");
     binLarge_ = ctx.pipeline("bfs", "bfs_binned_large");
     edgeExpand_ = ctx.pipeline("bfs", "bfs_edge_expand");
+    queueDegrees_ = ctx.pipeline("bfs", "bfs_queue_degrees");
+    bottomUp_ = ctx.pipeline("bfs", "bfs_bottom_up");
     prims_ = std::make_unique<Primitives>(ctx);
 }
 
@@ -230,13 +232,14 @@ void GpuBfs::runBinned(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
     finish(out);
 }
 
-void GpuBfs::runEdge(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
-                     std::vector<util::BfsLevel>* trace) {
+uint32_t GpuBfs::edgeTg(const GpuBfsOptions& opt) const {
     if (opt.ept == 0) throw std::runtime_error("ept must be >= 1");
     // The expand kernel's chunk size is tg * ept on both sides: use the
     // pipeline-clamped threadgroup size for the grid too.
-    const uint32_t tg = (uint32_t)std::min<NSUInteger>(checkTg(opt.tg),
-                                                       edgeExpand_.maxTotalThreadsPerThreadgroup);
+    return (uint32_t)std::min<NSUInteger>(checkTg(opt.tg), edgeExpand_.maxTotalThreadsPerThreadgroup);
+}
+
+void GpuBfs::ensureEdgeBuffers() {
     if (!queueA_) {
         queueA_ = ctx_.buffer((size_t)n_ * sizeof(uint32_t));
         queueB_ = ctx_.buffer((size_t)n_ * sizeof(uint32_t));
@@ -245,6 +248,33 @@ void GpuBfs::runEdge(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
         degA_ = ctx_.buffer((size_t)n_ * sizeof(uint32_t));
         degB_ = ctx_.buffer((size_t)n_ * sizeof(uint32_t));
     }
+}
+
+void GpuBfs::encodeEdgeLevel(id<MTLComputeCommandEncoder> enc, id<MTLBuffer> q, id<MTLBuffer> deg,
+                             id<MTLBuffer> qNext, id<MTLBuffer> degNext, uint32_t size,
+                             uint64_t total, uint32_t level, uint32_t tg, uint32_t ept) {
+    // Degrees -> exclusive offsets, in place (they are not needed afterwards).
+    prims_->scanExclusive(enc, deg, deg, size);
+    [enc setBuffer:rowPtr_ offset:0 atIndex:0];
+    [enc setBuffer:colIdx_ offset:0 atIndex:1];
+    [enc setBuffer:dist_ offset:0 atIndex:2];
+    [enc setBuffer:stats_ offset:0 atIndex:3];
+    [enc setBuffer:q offset:0 atIndex:4];
+    [enc setBuffer:deg offset:0 atIndex:5];
+    [enc setBuffer:qNext offset:0 atIndex:6];
+    [enc setBuffer:degNext offset:0 atIndex:7];
+    LevelParams p{size, level, 0, 0, (uint32_t)total, ept};
+    [enc setBytes:&p length:sizeof p atIndex:8];
+    const uint64_t chunk = (uint64_t)tg * ept;
+    [enc setComputePipelineState:edgeExpand_];
+    [enc dispatchThreadgroups:MTLSizeMake((total + chunk - 1) / chunk, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+}
+
+void GpuBfs::runEdge(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
+                     std::vector<util::BfsLevel>* trace) {
+    const uint32_t tg = edgeTg(opt);
+    ensureEdgeBuffers();
     const uint32_t* stats = static_cast<const uint32_t*>(stats_.contents);
     id<MTLBuffer> q = queueA_, qNext = queueB_, deg = degA_, degNext = degB_;
     static_cast<uint32_t*>(q.contents)[0] = source;
@@ -259,30 +289,104 @@ void GpuBfs::runEdge(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
             util::Timer t;
             id<MTLComputeCommandEncoder> enc;
             id<MTLCommandBuffer> cb = beginLevel(level, source, &enc);
-            if (total > 0) {
-                // Degrees -> exclusive offsets, in place (they are not needed afterwards).
-                prims_->scanExclusive(enc, deg, deg, size);
-                [enc setBuffer:rowPtr_ offset:0 atIndex:0];
-                [enc setBuffer:colIdx_ offset:0 atIndex:1];
-                [enc setBuffer:dist_ offset:0 atIndex:2];
-                [enc setBuffer:stats_ offset:0 atIndex:3];
-                [enc setBuffer:q offset:0 atIndex:4];
-                [enc setBuffer:deg offset:0 atIndex:5];
-                [enc setBuffer:qNext offset:0 atIndex:6];
-                [enc setBuffer:degNext offset:0 atIndex:7];
-                LevelParams p{size, level, 0, 0, (uint32_t)total, opt.ept};
-                [enc setBytes:&p length:sizeof p atIndex:8];
-                const uint64_t chunk = (uint64_t)tg * opt.ept;
-                [enc setComputePipelineState:edgeExpand_];
-                [enc dispatchThreadgroups:MTLSizeMake((total + chunk - 1) / chunk, 1, 1)
-                    threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
-            }
+            if (total > 0) encodeEdgeLevel(enc, q, deg, qNext, degNext, size, total, level, tg, opt.ept);
             endLevel(cb, enc);
             if (trace) trace->push_back({level, size, total, 'T', 'G', t.ms()});
             size = stats[kStatFound];
             total = stats[kStatNextEdges];
             std::swap(q, qNext);
             std::swap(deg, degNext);
+        }
+    }
+    finish(out);
+}
+
+// Direction-optimizing BFS. The switching rule is copied from cpu::bfsDO
+// (GAP): go bottom-up when the frontier's edges (scout) exceed the edges
+// not yet explored top-down (toCheck) / alpha; stay bottom-up while the
+// frontier grows or is larger than n / beta; after a bottom-up phase GAP sets
+// scout = 1 (kept, so CPU and GPU make identical decisions). Every level is
+// still one command buffer and one sync: format conversions are encoded at
+// the start of the first level in the new direction.
+void GpuBfs::runDO(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
+                   std::vector<util::BfsLevel>* trace) {
+    const uint32_t tg = edgeTg(opt);
+    const uint32_t tgBu = checkTg(opt.tg);
+    ensureEdgeBuffers();
+    const size_t words = ((size_t)n_ + 31) / 32;
+    if (!frontBm_) {
+        frontBm_ = ctx_.buffer(words * sizeof(uint32_t));
+        nextBm_ = ctx_.buffer(words * sizeof(uint32_t));
+        bmCount_ = ctx_.buffer(sizeof(uint32_t));
+    }
+    const uint32_t* stats = static_cast<const uint32_t*>(stats_.contents);
+    id<MTLBuffer> q = queueA_, qNext = queueB_, deg = degA_, degNext = degB_;
+    id<MTLBuffer> front = frontBm_, next = nextBm_;
+    static_cast<uint32_t*>(q.contents)[0] = source;
+    static_cast<uint32_t*>(deg.contents)[0] = view_.degree(source);
+
+    uint64_t size = 1;                       // frontier vertices (queue or bitmap)
+    uint64_t total = view_.degree(source);   // frontier edges (exact; sizes the TD dispatch)
+    uint64_t scout = total;                  // heuristic's m_f (GAP resets it to 1 after BU)
+    uint64_t toCheck = view_.m;              // heuristic's m_u
+    bool bottomUp = false, toBitmap = false, toQueue = false;
+    lastGpuMs_ = 0;
+    lastLevels_ = 0;
+
+    for (uint32_t level = 0; size > 0; ++level) {
+        @autoreleasepool {
+            if (!bottomUp && (double)scout > (double)toCheck / opt.alpha) {
+                bottomUp = true;
+                toBitmap = true;
+            }
+            util::Timer t;
+            id<MTLComputeCommandEncoder> enc;
+            id<MTLCommandBuffer> cb = beginLevel(level, source, &enc);
+            if (bottomUp) {
+                if (toBitmap) prims_->queueToBitmap(enc, q, size, front, n_);
+                toBitmap = false;
+                [enc setBuffer:rowPtr_ offset:0 atIndex:0];
+                [enc setBuffer:colIdx_ offset:0 atIndex:1];
+                [enc setBuffer:dist_ offset:0 atIndex:2];
+                [enc setBuffer:front offset:0 atIndex:3];
+                [enc setBuffer:next offset:0 atIndex:4];
+                [enc setBuffer:stats_ offset:0 atIndex:5];
+                setU32(enc, n_, 6);
+                setU32(enc, level, 7);
+                MetalContext::dispatch1D(enc, bottomUp_, n_, tgBu);
+                endLevel(cb, enc);
+                if (trace) trace->push_back({level, size, stats[kStatEdges], 'B', 'G', t.ms()});
+                const uint64_t oldAwake = size;
+                size = stats[kStatFound];
+                total = stats[kStatNextEdges];
+                std::swap(front, next);
+                if (!(size >= oldAwake || (double)size > (double)n_ / opt.beta)) {
+                    bottomUp = false;
+                    toQueue = true;
+                    scout = 1;
+                }
+            } else {
+                if (toQueue) {
+                    // Bitmap -> queue (unordered), then the degrees gpu_edge scans.
+                    prims_->bitmapToQueue(enc, front, n_, q, bmCount_);
+                    [enc setBuffer:rowPtr_ offset:0 atIndex:0];
+                    [enc setBuffer:q offset:0 atIndex:1];
+                    [enc setBuffer:deg offset:0 atIndex:2];
+                    setU32(enc, (uint32_t)size, 3);
+                    MetalContext::dispatch1D(enc, queueDegrees_, size, 256);
+                }
+                toQueue = false;
+                toCheck -= std::min(toCheck, scout);
+                if (total > 0)
+                    encodeEdgeLevel(enc, q, deg, qNext, degNext, (uint32_t)size, total, level, tg, opt.ept);
+                endLevel(cb, enc);
+                if (trace) trace->push_back({level, size, total, 'T', 'G', t.ms()});
+                size = stats[kStatFound];
+                total = stats[kStatNextEdges];
+                scout = total;
+                std::swap(q, qNext);
+                std::swap(deg, degNext);
+            }
         }
     }
     finish(out);

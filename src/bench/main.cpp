@@ -60,7 +60,7 @@ using BfsFn = std::function<void(const CSR&, uint32_t, uint32_t*, const cpu::Bfs
                                  std::vector<util::BfsLevel>*)>;
 
 const std::vector<std::string> kVariants = {"cpu_serial", "cpu_omp",   "cpu_do",  "gpu_vertex",
-                                            "gpu_naive",  "gpu_binned", "gpu_edge"};
+                                            "gpu_naive",  "gpu_binned", "gpu_edge", "gpu_do"};
 
 bool isGpuVariant(const std::string& v) { return v.rfind("gpu_", 0) == 0; }
 
@@ -84,6 +84,9 @@ BfsFn bfsVariant(const std::string& variant, gpu::GpuBfs* gbfs, const gpu::GpuBf
     if (variant == "gpu_edge")
         return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
                             std::vector<util::BfsLevel>* tr) { gbfs->runEdge(s, d, gopt, tr); };
+    if (variant == "gpu_do")
+        return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
+                            std::vector<util::BfsLevel>* tr) { gbfs->runDO(s, d, gopt, tr); };
     return nullptr;
 }
 
@@ -171,6 +174,8 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     gopt.smallMax = (uint32_t)args.getInt("small-max", 16);
     gopt.largeMin = (uint32_t)args.getInt("large-min", 256);
     gopt.ept = (uint32_t)args.getInt("ept", 2);
+    gopt.alpha = opt.alpha;  // --alpha / --beta are shared with cpu_do
+    gopt.beta = opt.beta;
 
     // Transform cost (and the GPU upload) is outside every timed region (PLAN 4.4).
     util::Timer prep;
@@ -212,7 +217,12 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     if (gpuVariant) params = "tg=" + std::to_string(gopt.tg);
     if (variant == "gpu_binned")
         params += " small_max=" + std::to_string(gopt.smallMax) + " large_min=" + std::to_string(gopt.largeMin);
-    if (variant == "gpu_edge") params += " ept=" + std::to_string(gopt.ept);
+    if (variant == "gpu_edge" || variant == "gpu_do") params += " ept=" + std::to_string(gopt.ept);
+    if (variant == "gpu_do") {
+        char b[64];
+        std::snprintf(b, sizeof b, " alpha=%g beta=%g", gopt.alpha, gopt.beta);
+        params += b;
+    }
 
     std::printf("%s: n %llu, symmetrized m %llu (%llu undirected edges), prep %.0f ms\n", dataset.c_str(),
                 (unsigned long long)g.n, (unsigned long long)g.m, (unsigned long long)(g.m / 2), prepMs);

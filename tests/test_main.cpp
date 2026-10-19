@@ -510,6 +510,56 @@ TEST(gpu_bfs_matches_serial_on_synthetic_graphs) {
     }
 }
 
+// gpu_do: exact dist; identical per-level direction decisions to cpu_do
+// (same GAP rule on the same counts); forced modes (alpha huge -> bottom-up
+// as early as possible, alpha tiny -> never bottom-up) exercise both
+// conversions and both kernels on every graph.
+TEST(gpu_do_matches_serial_and_cpu_decisions) {
+    struct Mode { const char* what; double a, b; };
+    const Mode modes[] = {{"default", 15, 18}, {"force-bu", 1e9, 1e9}, {"never-bu", 1e-9, 18},
+                          {"flip-flop", 2, 2}};
+    for (auto& [name, stored] : graph::gen::suite()) {
+        CSR g = graph::symmetrize(stored);
+        gpu::GpuBfs bfs(ctx(), g);
+        auto sources = testSources(g);
+        uint32_t hub = 0;
+        for (uint32_t v = 0; v < g.n; ++v) if (g.degree(v) > g.degree(hub)) hub = v;
+        sources.push_back(hub);
+        for (uint32_t src : sources) {
+            auto ref = cpu::bfsSerial(g, src);
+            for (const Mode& m : modes)
+                for (uint32_t tg : {32u, 256u}) {
+                    gpu::GpuBfsOptions o;
+                    o.tg = tg;
+                    o.alpha = m.a;
+                    o.beta = m.b;
+                    std::vector<util::BfsLevel> tr, ctr;
+                    std::vector<uint32_t> d(g.n, 777);
+                    bfs.runDO(src, d.data(), o, &tr);
+                    if (d != ref) std::printf("    %s src %u mode %s tg %u\n", name.c_str(), src, m.what, tg);
+                    CHECK(d == ref);
+                    uint64_t sum = 0;
+                    bool sawBU = false;
+                    for (auto& L : tr) { sum += L.frontier; sawBU |= L.direction == 'B'; }
+                    CHECK(sum == reachedCount(ref));
+                    if (m.a > 1e6 && reachedCount(ref) > 1) CHECK(sawBU);
+                    if (m.a < 1e-6) CHECK(!sawBU);
+
+                    cpu::BfsOptions co;
+                    co.alpha = m.a;
+                    co.beta = m.b;
+                    std::vector<uint32_t> cd(g.n);
+                    cpu::bfsDO(g, src, cd.data(), co, &ctr);
+                    CHECK(tr.size() == ctr.size());
+                    for (size_t i = 0; i < tr.size(); ++i) {
+                        CHECK(tr[i].direction == ctr[i].direction);
+                        CHECK(tr[i].frontier == ctr[i].frontier);
+                    }
+                }
+        }
+    }
+}
+
 // ---------------------------------------------------------------- runner
 
 int main() {

@@ -48,13 +48,16 @@ BFS variants so far: `cpu_serial` (reference), `cpu_omp` (level-synchronous,
 `gpu_naive` (thread per frontier vertex, CAS claim, atomic queue append),
 `gpu_binned` (degree bins: simdgroup-cooperative small lists, simdgroup per
 medium vertex, threadgroup per large vertex; `--small-max 16 --large-min 256`)
-and `gpu_edge` (scan of frontier degrees, fixed edges per thread; `--ept 2`).
+`gpu_edge` (scan of frontier degrees, fixed edges per thread; `--ept 2`) and
+`gpu_do` (direction-optimizing: `gpu_edge` top-down, bitmap bottom-up with
+early exit; `--alpha 15 --beta 18`, same rule as `cpu_do`).
 GPU variants take `--tg` (threadgroup size, default 256) and also report
 kernel-only time (`time_ms_gpu`).
 
 ```sh
 ./scripts/bench_bfs.sh results/bfs_gpu.csv gpu_vertex gpu_naive gpu_binned gpu_edge   # all datasets, validated
 ./scripts/sweep_balanced.sh     # gpu_binned thresholds / gpu_edge ept x threadgroup size
+./scripts/sweep_do.sh           # gpu_do alpha x beta
 ```
 
 ## Layout

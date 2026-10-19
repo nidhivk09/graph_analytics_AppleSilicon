@@ -4,8 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 5 complete** (2026-10-19). Waiting for approval to start Phase 6.
-- Next: Phase 6 (`gpu_do`: direction-optimizing GPU BFS with bitmap bottom-up).
+- **Phase 6 complete** (2026-10-19). Waiting for approval to start Phase 7.
+- Next: Phase 7 (hybrid CPU+GPU BFS, threshold sweep).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
   dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
@@ -380,3 +380,73 @@ Two other hypotheses tested and **rejected** (no measurable change on LiveJourna
 **Open issues / notes**
 - The `gpu_vertex` level-5/6 advantage (access-order hypothesis) is to be checked in Phase 6/9.
 - The three bin dispatches run serially in one encoder. They are independent within a level, so a concurrent dispatch type could overlap the small-bin tail with large-bin work. That's a possible later optimization; not needed now, since levels are gather-bound.
+
+### 2026-10-19 · Phase 6: direction-optimizing GPU BFS
+
+**Built**
+- **`gpu_do`** (`GpuBfs::runDO`):
+  - **Top-down levels** use `gpu_edge`, which was the best top-down variant on LiveJournal, Pokec and the star graph. Its kernel encoding was factored out into `encodeEdgeLevel`.
+  - **Bottom-up levels** use `bfs_bottom_up`: one thread per vertex. An unvisited vertex scans its neighbors and **exits at the first frontier hit** in a bitmap. The bitmap is n/8 bytes (600 KB for LiveJournal) and stays in cache, so the random reads no longer go to the 19 MB `dist` array. No CAS is needed, since each vertex's own thread is the only writer of its `dist`.
+  - **Next-frontier bitmap without atomics:** a simdgroup's 32 lanes are 32 consecutive vertices, i.e. exactly one bitmap word. `simd_or` assembles the word and lane 0 stores it. Every word is overwritten, so no clearing pass is needed.
+- **Switching rule is identical to `cpu_do`** (GAP), including `scout = 1` after a bottom-up phase. `m_f` comes from `stats[3]`, the degree sum of newly discovered vertices, which both the top-down and bottom-up kernels accumulate. `m_u` is tracked on the host.
+- **Still one command buffer and one sync per level.** Conversions are encoded at the start of the first level in the new direction:
+  - top-down → bottom-up: `queueToBitmap`
+  - bottom-up → top-down: `bitmapToQueue`, plus a new `bfs_queue_degrees` kernel that rebuilds `gpu_edge`'s scan input
+- **Tests: 19/19.** New: `gpu_do_matches_serial_and_cpu_decisions`. On every synthetic graph × 7 sources × 4 modes (default; forced bottom-up; never bottom-up; α = β = 2 flip-flop) × tg 32/256, the test checks:
+  - exact `dist`
+  - every reached vertex counted once
+  - **the same direction and frontier size at every level as `cpu_do`**
+- **Mutation checks (each caught):** wrong bit position in the `simd_or` word; corrupted degree rebuild after switching back; switching rule `>=` → `>` (caught by the CPU/GPU decision comparison).
+- `scripts/sweep_do.sh` → `results/sweep_bfs_do.csv`. Results: `results/bfs_gpu_do.csv`. Traces (4 sources each, LiveJournal + roadNet-CA): `results/trace_bfs_gpu_do.csv`.
+
+**α/β sweep** (`results/sweep_bfs_do.csv`; 16 sources × 3 trials, median e2e ms)
+
+| α \ β | LJ 10 | LJ 18 | LJ 24 | Pokec 10 | Pokec 18 | Pokec 24 |
+|---|---|---|---|---|---|---|
+| 5 | 13.2 | 12.7 | 12.1 | 6.15 | **5.89** | 6.09 |
+| 10 | 11.3 | 9.90 | 10.6 | 6.32 | 6.21 | 6.20 |
+| 15 | 9.94 | **9.68** | 9.78 | 6.20 | 6.12 | **5.89** |
+| 20 | 10.4 | 10.1 | 10.4 | 5.98 | 6.32 | 6.16 |
+| 30 | 11.2 | 10.6 | 10.9 | 6.59 | 6.35 | 6.91 |
+
+**Defaults: α = 15, β = 18** (GAP's values). They are best on LiveJournal and within run-to-run noise (~5%) of the best on Pokec, where all pairs span only 5.9–6.9 ms. Switching too early (α = 5) costs ~30% on LiveJournal: bottom-up starts while the frontier is still small, and unvisited vertices scan long lists without hits. Switching late (α = 30) costs ~10%.
+
+**Results** (`results/bfs_gpu_do.csv`; 64 sources × 5 trials, validated; median ms e2e, GPU-only in parentheses; peak RSS 1.6 GB). **Power: battery, Low Power Mode off.** The charger was unplugged during this phase. Before the run, I checked the GPU-side reference points against AC: launch round trip 112 µs (AC 104–111) and `gpu_edge` LiveJournal 38.8 ms (Phase 5 AC sweep 38.7), so GPU numbers look unaffected. CPU `cpu_do` was ~17% slower on battery (27.1 vs 22.4–23.3), which is why the CPU column below uses the Phase 2 AC numbers.
+
+| dataset | gpu_do | best top-down GPU (Phase 5) | speedup | cpu_do (Phase 2, AC) | gpu_do vs cpu_do |
+|---|---|---|---|---|---|
+| ego-Facebook | 1.56 (0.37) | gpu_edge 1.20 | 0.77× | 0.38 (serial 0.10) | slower |
+| web-Google | 9.2 (6.4) | binned/edge 10.9 | 1.18× | 6.9 | 0.75× |
+| roadNet-CA | 133 (30) | naive/edge 115 | ~0.9× (no bottom-up) | 41.3 (serial 37.5) | slower |
+| soc-Pokec | **6.0** (4.1) | gpu_edge 18.0 | **3.0×** | 8.8 | **1.5×** |
+| soc-LiveJournal1 | **11.1** (8.5) | gpu_vertex 36.8 | **3.3×** | 22.4 | **2.0×** |
+| com-Orkut | **13.8** (12.2) | gpu_binned 68.6 | **5.0×** | 28.0 | **2.0×** |
+
+- **On the social graphs, `gpu_do` is 3.0–5.0× faster than the best top-down GPU variant and 1.5–2.0× faster than `cpu_do` (8 threads).** This is the first GPU variant that beats the best CPU code. Orkut reaches 7.5 GTEPS (harmonic mean).
+- The Orkut median (13.8) vs min (7.1) spread is unusually wide; possibly battery-related. Revisit on AC in Phase 10.
+- **roadNet-CA never goes bottom-up** (0 bottom-up levels over 4 traced sources × 774 levels, the same as `cpu_do` in Phase 2), so `gpu_do` is just `gpu_edge` plus a check. It's still sync-bound: 133 ms e2e vs 30 ms GPU.
+- web-Google gains only 1.18×. It's a small graph where many levels are tiny and sync costs dominate.
+- ego-Facebook: the extra bottom-up machinery doesn't pay off on 4K vertices.
+
+**LiveJournal trace** (one source; direction per level `TTTTBBBTTTTTTT`)
+
+| level | frontier | edges examined | dir | ms | top-down `gpu_edge` (Phase 5) |
+|---|---|---|---|---|---|
+| 3 | 23K | 2.3M | T | 2.2 | 2.2 |
+| 4 | 607K | **14.0M** | B | 7.0 | 26.1 (34.4M edges) |
+| 5 | 2.42M | **2.6M** | B | 2.4 | 21.7 (39.3M edges) |
+| 6 | 1.49M | 0.39M | B | 1.5 | 6.9 (8.7M edges) |
+| 7 | 265K | 0.86M | T | 1.6 | – |
+
+The three bottom-up levels examine **17M adjacency entries instead of 82M** (early exit). Their random reads hit the cache-resident bitmap, so the levels that took ~55 ms top-down take ~11 ms. Levels 8–13 are tiny and cost ~0.2 ms each, which is basically the sync. The 23 ms for level 0 in the trace is the GPU wake-up on the first traced source, seen before in Phase 4.
+
+**Phase 5 open question (gpu_vertex faster on levels 5–6):** not settled. Bottom-up also walks vertices in ID order, but it does far less work per level, so the comparison doesn't isolate access order. Left for Phase 9 (orderings).
+
+**Decisions**
+- Top-down inside `gpu_do` = `gpu_edge` (not `gpu_binned`). It was best on LiveJournal and Pokec; `gpu_binned` was better on Orkut (68.6 vs 77.5), but Orkut's big levels go bottom-up anyway.
+- α = 15, β = 18 kept (sweep above).
+- `--alpha` / `--beta` are shared CLI options for `cpu_do` and `gpu_do`.
+
+**Open issues / notes**
+- The `gpu_do` table was measured on battery (GPU reference points matched AC). Rerun on AC in Phase 10 with everything else.
+- The remaining cost on the social graphs is mostly per-level syncs on the ~7–10 small levels (~0.2 ms each, ≈2 ms of 11 on LiveJournal) and the big bottom-up level. That's Phase 7's territory.
