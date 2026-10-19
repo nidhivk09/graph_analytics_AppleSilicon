@@ -61,7 +61,7 @@ private:
     uint32_t n_;
     Params params_{};
     id<MTLBuffer> rowOut_, colOut_, rowIn_, colIn_, outdeg_;
-    id<MTLBuffer> r_[2], contrib_, acc_, partial_, scalars_;
+    id<MTLBuffer> r_[2], contrib_, acc_, accLo_, partial_, scalars_;
     id<MTLBuffer> bins_[3];
     uint32_t binCount_[3] = {0, 0, 0};
     uint32_t binSmall_ = 0, binLarge_ = 0;  // thresholds the bins were built for

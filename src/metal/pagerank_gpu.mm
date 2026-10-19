@@ -40,7 +40,10 @@ GpuPageRank::GpuPageRank(MetalContext& ctx, const graph::CSR& out, const graph::
     outdeg_ = ctx.buffer(outdeg.data(), outdeg.size() * 4);
     for (auto& b : r_) b = ctx.buffer((size_t)n_ * 4);
     contrib_ = ctx.buffer((size_t)n_ * 4);
-    if (needOut) acc_ = ctx.buffer((size_t)n_ * 4);
+    if (needOut) {
+        acc_ = ctx.buffer((size_t)n_ * 4);
+        accLo_ = ctx.buffer((size_t)n_ * 4);  // compensation terms (see pr_push)
+    }
     reduceGroups_ = std::min(kMaxGroups, std::max<size_t>(1, ((size_t)n_ + kTG - 1) / kTG));
     partial_ = ctx.buffer(reduceGroups_ * 4);
     scalars_ = ctx.buffer(4 * 4);
@@ -108,11 +111,13 @@ void GpuPageRank::encodeIteration(id<MTLComputeCommandEncoder> enc, PrVariant v,
         [enc setBuffer:contrib_ offset:0 atIndex:2];
         [enc setBuffer:acc_ offset:0 atIndex:3];
         [enc setBytes:&params_ length:sizeof params_ atIndex:4];
+        [enc setBuffer:accLo_ offset:0 atIndex:5];
         MetalContext::dispatch1D(enc, push_, n_, tg);
         [enc setBuffer:acc_ offset:0 atIndex:0];
         [enc setBuffer:rNew offset:0 atIndex:1];
         [enc setBuffer:scalars_ offset:0 atIndex:2];
         [enc setBytes:&params_ length:sizeof params_ atIndex:3];
+        [enc setBuffer:accLo_ offset:0 atIndex:4];
         MetalContext::dispatch1D(enc, pushFin_, n_, 256);
     } else {
         [enc setBuffer:rowIn_ offset:0 atIndex:0];
@@ -187,7 +192,10 @@ GpuPrResult GpuPageRank::run(PrVariant v, const GpuPrOptions& opt) {
         [enc setBuffer:r_[0] offset:0 atIndex:0];
         [enc setBytes:&params_ length:sizeof params_ atIndex:1];
         MetalContext::dispatch1D(enc, init_, n_, 256);
-        if (v == PrVariant::Push) prims_->fill(enc, acc_, 0, n_);  // 0.0f has all-zero bits
+        if (v == PrVariant::Push) {  // 0.0f has all-zero bits
+            prims_->fill(enc, acc_, 0, n_);
+            prims_->fill(enc, accLo_, 0, n_);
+        }
     };
 
     @autoreleasepool {

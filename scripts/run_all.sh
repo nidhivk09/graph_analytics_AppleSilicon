@@ -51,7 +51,7 @@ stage() {
   local s=$1 t0=$SECONDS
   echo "=== $s ($(date +%H:%M:%S)) ===" | tee -a "$log"
   case $s in
-    test)    make test 2>&1 | tail -1 ;;
+    test)    make test 2>&1 | grep -E "FAIL|^    |passed" ;;  # failing tests + their CHECK lines
     micro)   ./scripts/micro.sh ;;
     stats)   rm -f results/dataset_stats.csv results/degree_hist.csv
              for d in $DATASETS; do ./build/gstats data/$d.bin; done ;;

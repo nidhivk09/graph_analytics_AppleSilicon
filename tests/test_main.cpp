@@ -771,9 +771,12 @@ TEST(reorder_locality_known_answers) {
 
 // ---------------------------------------------------------------- runner
 
-int main() {
+// gtest [substring]: run only tests whose name contains the substring.
+int main(int argc, char** argv) {
+    const std::string filter = argc > 1 ? argv[1] : "";
     int passed = 0;
     for (auto& t : registry()) {
+        if (!filter.empty() && t.name.find(filter) == std::string::npos) continue;
         g_current_failed = false;
         std::printf("[ RUN  ] %s\n", t.name.c_str());
         auto t0 = std::chrono::steady_clock::now();

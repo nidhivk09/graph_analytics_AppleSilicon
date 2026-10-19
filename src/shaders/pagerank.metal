@@ -129,11 +129,35 @@ kernel void pr_reduce(device const float* partial [[buffer(0)]],
 // accumulator near 0.46 (ulp 3e-8), all rounding the same way, giving L1
 // error 1e-3 and ranks summing to 1.00047 (outside PLAN.md 7 tolerances).
 // Real graphs passed (L1 ~1e-7: their rounding errors are random).
+//
+// Compensated atomics: aggregation alone still left the star at L1 ~1e-4,
+// right at the PLAN.md 7 tolerance (the hub still takes ~3k atomic adds per
+// iteration into a value near 0.46; 1 test run in 15 failed, depending on
+// atomic order). Kahan cannot wrap an atomic, but each add's rounding error
+// can be computed exactly afterwards: atomic_fetch_add returns the old value
+// and stored fl(old + x), so TwoSum(old, x) gives the error, which goes into
+// a second accumulator acc_lo (tiny magnitudes, so its own rounding is
+// negligible). Result = acc + acc_lo. Requires fast math off (TwoSum).
+// Compensating every add doubled the atomics and made push 2.2x slower
+// (LiveJournal 33 -> 73 ms/iteration). So only adds that lose more than
+// 2^-16 of the term are compensated: that needs an accumulator >~250x the
+// term, i.e. hub-like vertices. Skipped errors are each < |x| * 2^-16, so
+// even if all were systematic they total < 1.5e-5 of the accumulator.
+static inline void add_compensated(device atomic_float* acc, device atomic_float* acc_lo, uint t, float x)
+{
+    float old = atomic_fetch_add_explicit(&acc[t], x, memory_order_relaxed);
+    float s = old + x;          // the value the atomic stored
+    float bp = s - old;         // TwoSum (Knuth): exact error of old + x
+    float err = (old - (s - bp)) + (x - bp);
+    if (fabs(err) > fabs(x) * 0x1p-16f) atomic_fetch_add_explicit(&acc_lo[t], err, memory_order_relaxed);
+}
+
 kernel void pr_push(device const uint* row_ptr [[buffer(0)]],
                     device const uint* col_idx [[buffer(1)]],
                     device const float* contrib [[buffer(2)]],
                     device atomic_float* acc   [[buffer(3)]],
                     constant PrParams& p       [[buffer(4)]],
+                    device atomic_float* acc_lo [[buffer(5)]],
                     uint gid [[thread_position_in_grid]])
 {
     bool active = gid < p.n;  // no early return: rounds are simdgroup-uniform
@@ -147,23 +171,26 @@ kernel void pr_push(device const uint* row_ptr [[buffer(0)]],
         uint lead = simd_min(t);  // some active lane's target (inactive lanes hold UINT_MAX)
         if (simd_all(!has || t == lead)) {
             float s = simd_sum(has ? c : 0.0f);
-            if (simd_is_first()) atomic_fetch_add_explicit(&acc[lead], s, memory_order_relaxed);
+            if (simd_is_first()) add_compensated(acc, acc_lo, lead, s);
         } else if (has) {
-            atomic_fetch_add_explicit(&acc[t], c, memory_order_relaxed);
+            add_compensated(acc, acc_lo, t, c);
         }
     }
 }
 
-// r_new = (1-d)/n + d * (acc + dangling/n); acc is zeroed for the next iteration.
+// r_new = (1-d)/n + d * (acc + acc_lo + dangling/n); both accumulators are
+// zeroed for the next iteration.
 kernel void pr_push_finalize(device float* acc            [[buffer(0)]],
                              device float* r_new          [[buffer(1)]],
                              device const float* scalars  [[buffer(2)]],
                              constant PrParams& p         [[buffer(3)]],
+                             device float* acc_lo         [[buffer(4)]],
                              uint gid [[thread_position_in_grid]])
 {
     if (gid >= p.n) return;
-    r_new[gid] = pr_value(acc[gid], p, scalars);
+    r_new[gid] = pr_value(acc[gid] + acc_lo[gid], p, scalars);
     acc[gid] = 0.0f;
+    acc_lo[gid] = 0.0f;
 }
 
 // ---------------------------------------------------------------------------
