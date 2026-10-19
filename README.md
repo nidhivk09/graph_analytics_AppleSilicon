@@ -50,7 +50,10 @@ BFS variants so far: `cpu_serial` (reference), `cpu_omp` (level-synchronous,
 medium vertex, threadgroup per large vertex; `--small-max 16 --large-min 256`)
 `gpu_edge` (scan of frontier degrees, fixed edges per thread; `--ept 2`) and
 `gpu_do` (direction-optimizing: `gpu_edge` top-down, bitmap bottom-up with
-early exit; `--alpha 15 --beta 18`, same rule as `cpu_do`).
+early exit; `--alpha 15 --beta 18`, same rule as `cpu_do`) and `hybrid`
+(`gpu_do` where levels with work below `--T` (default 1e5) run on the CPU with
+OpenMP, `--threads` default 4, directly on the shared buffers; `--T 0` = all
+GPU, `--T inf` = all CPU).
 GPU variants take `--tg` (threadgroup size, default 256) and also report
 kernel-only time (`time_ms_gpu`).
 
@@ -58,6 +61,7 @@ kernel-only time (`time_ms_gpu`).
 ./scripts/bench_bfs.sh results/bfs_gpu.csv gpu_vertex gpu_naive gpu_binned gpu_edge   # all datasets, validated
 ./scripts/sweep_balanced.sh     # gpu_binned thresholds / gpu_edge ept x threadgroup size
 ./scripts/sweep_do.sh           # gpu_do alpha x beta
+./scripts/sweep_hybrid.sh       # hybrid threshold T (0 .. inf) x CPU threads
 ```
 
 ## Layout

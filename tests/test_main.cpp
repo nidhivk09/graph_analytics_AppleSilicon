@@ -560,6 +560,63 @@ TEST(gpu_do_matches_serial_and_cpu_decisions) {
     }
 }
 
+// hybrid: every threshold from all-GPU to all-CPU must give exact dist and
+// the same direction sequence as cpu_do (the device choice must not change
+// the algorithm); with T = inf no level may touch the GPU, with T = 0 none
+// the CPU, and intermediate T must put small levels on the CPU.
+TEST(hybrid_matches_serial_at_every_threshold) {
+    const uint64_t Ts[] = {0, 1, 64, 1000, 100000, UINT64_MAX};
+    struct Mode { double a, b; };
+    const Mode modes[] = {{15, 18}, {1e9, 1e9}, {2, 2}};
+    for (auto& [name, stored] : graph::gen::suite()) {
+        CSR g = graph::symmetrize(stored);
+        gpu::GpuBfs bfs(ctx(), g);
+        auto sources = testSources(g);
+        uint32_t hub = 0;
+        for (uint32_t v = 0; v < g.n; ++v) if (g.degree(v) > g.degree(hub)) hub = v;
+        sources.push_back(hub);
+        for (uint32_t src : sources) {
+            auto ref = cpu::bfsSerial(g, src);
+            for (const Mode& m : modes) {
+                cpu::BfsOptions co;
+                co.alpha = m.a;
+                co.beta = m.b;
+                std::vector<util::BfsLevel> ctr;
+                std::vector<uint32_t> cd(g.n);
+                cpu::bfsDO(g, src, cd.data(), co, &ctr);
+                for (uint64_t T : Ts)
+                    for (int threads : {1, 8}) {
+                        gpu::GpuBfsOptions o;
+                        o.alpha = m.a;
+                        o.beta = m.b;
+                        o.hybridT = T;
+                        o.cpuThreads = threads;
+                        std::vector<util::BfsLevel> tr;
+                        std::vector<uint32_t> d(g.n, 777);
+                        bfs.runHybrid(src, d.data(), o, &tr);
+                        if (d != ref)
+                            std::printf("    %s src %u T %llu threads %d\n", name.c_str(), src,
+                                        (unsigned long long)T, threads);
+                        CHECK(d == ref);
+                        CHECK(tr.size() == ctr.size());
+                        bool cpuLevel = false, gpuLevel = false;
+                        for (size_t i = 0; i < tr.size(); ++i) {
+                            CHECK(tr[i].direction == ctr[i].direction);
+                            CHECK(tr[i].frontier == ctr[i].frontier);
+                            cpuLevel |= tr[i].device == 'C';
+                            gpuLevel |= tr[i].device == 'G';
+                        }
+                        if (T == 0) CHECK(!cpuLevel);
+                        if (T == UINT64_MAX) CHECK(!gpuLevel);
+                        // Level 0 top-down examines degree(source) edges: CPU iff below T.
+                        if (tr[0].direction == 'T')
+                            CHECK((tr[0].device == 'C') == (g.degree(src) < T));
+                    }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------- runner
 
 int main() {

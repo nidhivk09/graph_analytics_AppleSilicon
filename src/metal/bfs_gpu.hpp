@@ -28,6 +28,8 @@ struct GpuBfsOptions {
     uint32_t ept = 2;           // gpu_edge (and gpu_do top-down): edges per thread
     double alpha = 15.0;        // gpu_do: go bottom-up if m_f > m_u / alpha (GAP heuristic)
     double beta = 18.0;         // gpu_do: back to top-down when frontier shrinks below n / beta
+    uint64_t hybridT = 0;       // hybrid: levels with work < hybridT run on the CPU (gbench default 1e5)
+    int cpuThreads = 0;         // hybrid: OpenMP threads for CPU levels (0 = all cores)
 };
 
 class GpuBfs {
@@ -53,7 +55,15 @@ public:
     // gpu_do: direction-optimizing; top-down = gpu_edge, bottom-up = bitmap
     // frontier with early exit; same switching rule as cpu::bfsDO.
     void runDO(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
-               std::vector<util::BfsLevel>* trace = nullptr);
+               std::vector<util::BfsLevel>* trace = nullptr) {
+        runDirOpt(source, out, opt, trace, 0);
+    }
+    // hybrid: gpu_do, but levels whose work is below opt.hybridT run on the
+    // CPU (OpenMP) directly on the shared buffers.
+    void runHybrid(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
+                   std::vector<util::BfsLevel>* trace = nullptr) {
+        runDirOpt(source, out, opt, trace, opt.hybridT);
+    }
 
     // Kernel-only time of the last run: sum of GPUEndTime - GPUStartTime over
     // its command buffers (excludes the host round trip between levels).
@@ -63,6 +73,8 @@ public:
 
 private:
     void finish(uint32_t* out);
+    void runDirOpt(uint32_t source, uint32_t* out, const GpuBfsOptions& opt,
+                   std::vector<util::BfsLevel>* trace, uint64_t threshold);
     // Start a level's command buffer; level 0 also gets the dist init kernel.
     id<MTLCommandBuffer> beginLevel(uint32_t level, uint32_t source,
                                     id<MTLComputeCommandEncoder>* enc);

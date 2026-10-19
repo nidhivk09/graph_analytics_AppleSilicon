@@ -5,6 +5,8 @@
 //          [--tg 256]                                (GPU variants: threadgroup size)
 //          [--small-max 16 --large-min 256]         (gpu_binned degree thresholds)
 //          [--ept 2]                                 (gpu_edge: edges per thread)
+//          [--T 100000 | --T inf]                    (hybrid: levels with work < T run on
+//                                                     the CPU with --threads threads, default 4)
 //          [--sources 64 | --source S] [--seed 1] [--any-component] [--warmup 2] [--trials 5]
 //          [--source-warmup 1]
 //          [--validate] [--trace trace.csv] [--csv results/bfs.csv] [--ordering original]
@@ -60,9 +62,11 @@ using BfsFn = std::function<void(const CSR&, uint32_t, uint32_t*, const cpu::Bfs
                                  std::vector<util::BfsLevel>*)>;
 
 const std::vector<std::string> kVariants = {"cpu_serial", "cpu_omp",   "cpu_do",  "gpu_vertex",
-                                            "gpu_naive",  "gpu_binned", "gpu_edge", "gpu_do"};
+                                            "gpu_naive",  "gpu_binned", "gpu_edge", "gpu_do",
+                                            "hybrid"};
 
-bool isGpuVariant(const std::string& v) { return v.rfind("gpu_", 0) == 0; }
+// Variants that need the graph uploaded to Metal buffers.
+bool isGpuVariant(const std::string& v) { return v.rfind("gpu_", 0) == 0 || v == "hybrid"; }
 
 // The function that runs `variant`. GPU variants are bound to `gbfs` (the
 // uploaded graph) and ignore the CSR argument.
@@ -87,6 +91,9 @@ BfsFn bfsVariant(const std::string& variant, gpu::GpuBfs* gbfs, const gpu::GpuBf
     if (variant == "gpu_do")
         return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
                             std::vector<util::BfsLevel>* tr) { gbfs->runDO(s, d, gopt, tr); };
+    if (variant == "hybrid")
+        return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
+                            std::vector<util::BfsLevel>* tr) { gbfs->runHybrid(s, d, gopt, tr); };
     return nullptr;
 }
 
@@ -176,6 +183,11 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     gopt.ept = (uint32_t)args.getInt("ept", 2);
     gopt.alpha = opt.alpha;  // --alpha / --beta are shared with cpu_do
     gopt.beta = opt.beta;
+    // Hybrid CPU levels are small by construction: 4 threads (the P-cores)
+    // beat 8 in the Phase 7 sweep, as small levels did in Phase 2.
+    gopt.cpuThreads = (variant == "hybrid" && !args.has("threads")) ? 4 : opt.threads;
+    const std::string tArg = args.get("T", "100000");
+    gopt.hybridT = tArg == "inf" ? UINT64_MAX : (uint64_t)std::stoull(tArg);
 
     // Transform cost (and the GPU upload) is outside every timed region (PLAN 4.4).
     util::Timer prep;
@@ -217,12 +229,16 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     if (gpuVariant) params = "tg=" + std::to_string(gopt.tg);
     if (variant == "gpu_binned")
         params += " small_max=" + std::to_string(gopt.smallMax) + " large_min=" + std::to_string(gopt.largeMin);
-    if (variant == "gpu_edge" || variant == "gpu_do") params += " ept=" + std::to_string(gopt.ept);
-    if (variant == "gpu_do") {
+    if (variant == "gpu_edge" || variant == "gpu_do" || variant == "hybrid")
+        params += " ept=" + std::to_string(gopt.ept);
+    if (variant == "gpu_do" || variant == "hybrid") {
         char b[64];
         std::snprintf(b, sizeof b, " alpha=%g beta=%g", gopt.alpha, gopt.beta);
         params += b;
     }
+    if (variant == "hybrid")
+        params += " T=" + tArg + " threads=" +
+                  std::to_string(gopt.cpuThreads > 0 ? gopt.cpuThreads : omp_get_max_threads());
 
     std::printf("%s: n %llu, symmetrized m %llu (%llu undirected edges), prep %.0f ms\n", dataset.c_str(),
                 (unsigned long long)g.n, (unsigned long long)g.m, (unsigned long long)(g.m / 2), prepMs);

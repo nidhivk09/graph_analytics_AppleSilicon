@@ -4,8 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 6 complete** (2026-10-19). Waiting for approval to start Phase 7.
-- Next: Phase 7 (hybrid CPU+GPU BFS, threshold sweep).
+- **Phase 7 complete** (2026-10-19). Waiting for approval to start Phase 8.
+- Next: Phase 8 (PageRank: CPU reference + four GPU variants).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
   dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
@@ -450,3 +450,79 @@ The three bottom-up levels examine **17M adjacency entries instead of 82M** (ear
 **Open issues / notes**
 - The `gpu_do` table was measured on battery (GPU reference points matched AC). Rerun on AC in Phase 10 with everything else.
 - The remaining cost on the social graphs is mostly per-level syncs on the ~7–10 small levels (~0.2 ms each, ≈2 ms of 11 on LiveJournal) and the big bottom-up level. That's Phase 7's territory.
+
+### 2026-10-19 · Phase 7: hybrid CPU+GPU BFS
+
+**Built**
+- **`src/cpu/bfs_steps.{hpp,cpp}`**: single BFS levels on the CPU that use the **GPU's exact data layout** in the Metal shared buffers.
+  - top-down: queue in → queue out plus degrees, CAS claims, per-thread buffers with one atomic append each
+  - bottom-up: bitmap in → bitmap out, a thread owns whole words, no atomics
+  - queue↔bitmap conversions and `dist` init
+  - Each step returns the counters the GPU kernels put in their stats buffer, so any level can run on either device with **no copies**.
+  - Levels under 2048 edges run on one thread, because an OpenMP region costs ~20 µs (Phase 2), more than the whole level.
+- **`GpuBfs::runDirOpt(threshold)`:** one direction-optimizing state machine. `gpu_do` = threshold 0; `hybrid` = `--T`.
+  - **Per level:** the CPU runs it if its work is below T. Work is the frontier's edges for a top-down level (known exactly), and the unexplored edges `m_u` for a bottom-up level (an upper bound, since bottom-up work is only known afterwards).
+  - A GPU level is one command buffer plus a sync; **a CPU level needs no sync at all**.
+  - Conversions run on whichever device executes the first level in the new direction.
+  - Correctness relies on unified-memory coherence: CPU writes before a commit are visible to that command buffer, and GPU writes are visible to the CPU after `waitUntilCompleted`.
+- gbench `hybrid`: `--T N|inf` (default 1e5), CPU threads `--threads` (default 4 for hybrid).
+- `scripts/sweep_hybrid.sh` → `results/sweep_hybrid.csv`. Results: `results/bfs_hybrid.csv`. Traces: `results/trace_bfs_hybrid.csv`, LiveJournal + roadNet-CA × 4 sources at T = 1e5 *and* T = 0, with a device column.
+- **Tests: 20/20.** New: `hybrid_matches_serial_at_every_threshold`. On every synthetic graph × 7 sources × 3 heuristic modes × T ∈ {0, 1, 64, 1000, 1e5, ∞} × 1/8 CPU threads, it checks:
+  - exact `dist`
+  - **the same direction and frontier at every level as `cpu_do`** (the device choice must not change the algorithm)
+  - T = 0 never uses the CPU, T = ∞ never the GPU, and a top-down level 0 is on the CPU iff degree(source) < T
+- **Mutation check:** making the CPU step write wrong degrees for the GPU's next scan fails only mixed-device runs (grid100x100, T = 64). That confirms the test exercises the hand-off.
+
+**Prediction (written before the sweep).**
+- GPU level: ~0.16–0.19 ms fixed for tiny top-down levels (Phase 4/5 traces: the ~111 µs Phase 3 round trip plus command-buffer setup and scan dispatches), then ~2 G edges/s.
+- CPU level: ~20 µs fork/join plus ~0.62 G edges/s (`cpu_omp` LiveJournal, Phase 2), serial below 2048 edges.
+- Break-even: 20 µs + E/0.62G = 190 µs + E/2G gives **E ≈ 1.5×10⁵**. Phase 3's rougher estimate was 3×10⁴–10⁵. **Predicted best T ≈ 10⁵**, with roadNet-CA nearly all-CPU.
+
+**Sweep** (`results/sweep_hybrid.csv`; 16 sources × 3 trials; median e2e ms)
+
+| T | roadNet 4 thr | roadNet 8 thr | LJ 4 thr | LJ 8 thr | web-Google 4 thr | web-Google 8 thr |
+|---|---|---|---|---|---|---|
+| 0 (all GPU) | 115.7 | 124.3 | 11.1 | 11.1 | 8.9 | 9.0 |
+| 1e3 | 110.1 | 101.8 | 10.2 | 10.1 | 7.6 | 7.8 |
+| 1e4 | 73.4 | 72.5 | **9.0** | 10.0 | 7.4 | 7.3 |
+| 3e4 | 27.2 | 33.0 | 9.4 | **9.5** | 5.7 | 7.1 |
+| **1e5** | 26.2 | 30.2 | 9.6 | 9.6 | **5.1** | 7.0 |
+| 3e5 | **25.5** | 31.3 | 10.1 | 9.7 | 7.1 | 6.9 |
+| 1e6 | 26.7 | 32.2 | 13.1 | 11.0 | 8.1 | 7.4 |
+| 1e7 | 28.0 | 30.1 | 14.3 | 15.4 | 9.0 | 6.5 |
+| ∞ (all CPU) | 27.8 | 31.6 | 31.5 | 23.4 | 8.5 | 6.7 |
+
+**Result: the prediction holds.** T = 10⁵ is inside the best band on all three graphs (roadNet ≥ 3×10⁴; LiveJournal 10⁴–3×10⁵; web-Google best at 10⁵ with 4 threads). Defaults: **T = 10⁵, 4 CPU threads**. 4 threads beat 8 on roadNet-CA at every T ≥ 3×10⁴ (25–28 vs 30–33 ms), the same P/E-core barrier effect as in Phase 2. On LiveJournal they tie.
+
+**Why the best T is what it is** (from the traces)
+- **A GPU level has a fixed cost of ~0.17–0.24 ms** however small it is. roadNet-CA's GPU levels have a median of 0.198 ms; LiveJournal's tail levels with 1–4K edges take 0.17–0.24 ms. That is the round trip plus command-buffer and scan-dispatch setup. **A tiny CPU level costs 1–35 µs** (roadNet median 34 µs; LiveJournal tail levels 0.1–26 µs), because the serial path has no fork/join and the data is already in the shared buffers. So any level small enough to finish on the CPU in ~0.2 ms belongs there.
+- **The CPU's top-down rate on mid-size levels is lower than I assumed:** ~0.11–0.2 G edges/s with 4 threads (LiveJournal level 3: 76K edges took 0.67 ms on the CPU vs 0.31 ms on the GPU), not the 0.62 G/s of 8 threads on huge levels. That moves the true break-even to **≈ 0.2 ms × 0.15 G/s ≈ 3×10⁴ edges**, a bit below my 1.5×10⁵ but still inside the Phase 3 range.
+- **Why the curves are flat:** real graphs have few levels near the break-even. LiveJournal's levels jump from 76K edges (level 3) to 4.6M (level 4). Any T from ~10⁴ to ~4×10⁶ gives nearly the same device assignment, so the curve only rises when the big bottom-up levels (m_u ≈ 10⁷) move to the CPU (T ≥ 10⁶–10⁷). roadNet-CA's levels never exceed a few ×10⁴ edges, so once T ≥ 3×10⁴ everything is on the CPU and T stops mattering.
+- **Rule of thumb:** T ≈ (GPU per-level fixed cost) × (CPU edge rate on mid-size levels) ≈ 0.2 ms × 0.1–0.6 G/s ≈ 2×10⁴–10⁵. This follows directly from Phase 3's ~111 µs round trip.
+
+**Results** (`results/bfs_hybrid.csv`; T = 1e5, 4 CPU threads; 64 sources × 5 trials, validated; AC power, Low Power Mode off; median e2e ms; peak RSS 1.96 GB)
+
+| dataset | hybrid | gpu_do (T=0, Phase 6) | best CPU (Phase 2) | hybrid vs gpu_do | hybrid vs best CPU |
+|---|---|---|---|---|---|
+| ego-Facebook | 0.95 | 1.56 | serial 0.10 | 1.6× | 0.1× |
+| web-Google | 6.8 | 9.2 | do 6.9 | 1.4× | 1.0× |
+| roadNet-CA | **25.6** | 133 | serial 37.5 | **5.2×** | **1.46×** |
+| soc-Pokec | **5.0** | 6.0 | do 8.8 | 1.2× | **1.8×** |
+| soc-LiveJournal1 | **9.3** | 11.1 | do 22.4 | 1.2× | **2.4×** |
+| com-Orkut | **13.6** | 13.8 | do 28.0 | 1.0× | **2.1×** |
+| star100k | 0.47 | 0.61 | serial 0.16 | 1.3× | 0.3× |
+
+- **Hybrid is the best or tied-best non-trivial variant on every dataset except the two tiny graphs.** roadNet-CA, the case every GPU variant lost, is now **1.46× faster than serial CPU** and 5.2× faster than all-GPU.
+- **Honest caveat:** most of roadNet's gain is from running its tiny levels serially on the CPU. All-CPU hybrid (T = ∞) is 27.8 ms, also faster than Phase 2's `cpu_do` (41.3), which uses an OpenMP region on every level. So on roadNet-CA "hybrid beats CPU" really means "the CPU path with a serial cutoff beats the plain OpenMP baseline". The GPU contributes nothing there. On the social graphs, both devices contribute: the GPU takes the big levels and the CPU removes ~10 syncs of ~0.2 ms.
+- Orkut gains little, because its levels are few and mostly large.
+
+**Stretch goal (indirect-dispatch multi-level GPU BFS): not done.** With hybrid, the remaining GPU levels are the big ones (≥ 0.66 ms each on LiveJournal), where the ~0.11 ms sync is ≤ 15% of the level. Keeping the tiny levels on the GPU via indirect dispatch would save ~0.17 ms per tiny level, the same as moving them to the CPU already does. It would matter for graphs with many mid-size levels; none of ours have that profile.
+
+**Decisions**
+- `hybrid` defaults: T = 1e5, 4 CPU threads. `gpu_do` is unchanged and is now `runDirOpt` with threshold 0.
+- The work estimate for bottom-up levels is `m_u` (unexplored edges), so bottom-up levels go to the CPU only for very large T.
+- CPU steps go serial below 2048 edges (`steps::kSerialEdges`).
+
+**Open issues / notes**
+- On LiveJournal, CPU level 2 (1755 edges, serial) took 0.28 ms in one trace, vs a few µs for comparable levels. Probably a one-off (first touch of thread-local buffers or a cold cache); not investigated.
+- Swap was ~7 GB used, with other apps open; close apps before Phase 10.
