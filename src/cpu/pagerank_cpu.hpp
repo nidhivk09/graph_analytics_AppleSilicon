@@ -59,6 +59,30 @@ PrCheck checkRanks(const std::vector<double>& ref, const T* got) {
     return c;
 }
 
+// Acceptance for gpu_pull_gs in --tol mode (Phase 12). The normal check compares a variant
+// with cpu_serial run the same way, which follows the *same* Jacobi
+// trajectory, so it measures only float rounding. A Gauss-Seidel run is a
+// different approximation of the fixed point (after k sweeps, or when its
+// per-sweep change drops below tol), so that comparison would fail for the
+// wrong reason. Instead both are compared with the converged reference
+// (tol 1e-10): the GS result passes if every PLAN.md 7 metric is within its
+// tolerance or no worse than the Jacobi reference's own distance from
+// convergence, i.e. GS must be at least as accurate as the computation it
+// replaces. (Fixed-iteration mode is checked differently, see gbench runPr.) Two details:
+//  - Sum: Jacobi with dangling redistribution conserves the total exactly,
+//    GS (dangling term from the start of the sweep) does not, so "no worse
+//    sum" would be unreachable. For any vector |sum - 1| <= L1 distance to
+//    the true ranks, so the sum gets the same budget as L1.
+//  - Top-1000: when neither method has converged at some vertex (roadNet-CA
+//    after 20 iterations: both 0.022463 at the same vertex), the float GPU
+//    value can exceed the double reference's error by rounding alone, so a
+//    relative slack of 1e-4 (~1000 float ulps) is allowed on that bound.
+inline bool gsNoWorseThanJacobi(const PrCheck& gs, const PrCheck& jacobi) {
+    const double l1Budget = std::max(1e-4, jacobi.l1);
+    return gs.l1 <= l1Budget && std::fabs(gs.sum - 1.0) <= l1Budget &&
+           gs.maxRelTop <= std::max(1e-3, jacobi.maxRelTop * (1 + 1e-4));
+}
+
 // Out-degrees of a CSR (the original, directed graph).
 std::vector<uint32_t> outDegrees(const graph::CSR& g);
 

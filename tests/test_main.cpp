@@ -710,6 +710,69 @@ TEST(pagerank_variants_match_reference) {
     }
 }
 
+// Phase 12: gpu_pull_gs (in-place, Gauss-Seidel-style). Its iterates are a
+// different sequence from the Jacobi reference, so it is checked against the
+// converged reference (tol 1e-10):
+//  - fixed 20 sweeps: ranks sum to 1 (per-sweep renormalization). k sweeps
+//    can be more or less accurate than k Jacobi iterations depending on the
+//    graph and order, so they are not compared with Jacobi here;
+//  - 200 sweeps: within the PLAN.md 7 tolerances of the converged
+//    reference (the kernels converge to the right vector). Not a tol run:
+//    vertices updated in the same GPU wave converge only at the Jacobi
+//    rate, so a global L1-change test can stop early (see gbench runPr);
+//  - run to tol/4: at least as accurate as Jacobi run to tol
+//    (cpu::gsNoWorseThanJacobi), the rule the benchmarks rely on. The 4x:
+//    GS's per-sweep change understates its distance from the fixed point
+//    more than Jacobi's does, so at EQUAL tol GS can stop less accurate
+//    (rmat12 natural order: top-1000 rel 1.07e-3 vs Jacobi 7.4e-5).
+// Mutation checks (each caught): no renormalization; wrong in-place
+// contribution (val / (d + 1)). The suite exercises both update orders
+// (colored: path, grid, ...; natural: complete200, rmat12).
+TEST(pagerank_gs_converges_to_reference) {
+    int colored = 0, natural = 0, failures = 0;
+    for (auto& [name, g] : graph::gen::suite()) {
+        if (g.n == 0) continue;
+        CSR in = g.directed() ? graph::transpose(g) : g;
+        auto od = cpu::outDegrees(g);
+        gpu::GpuPageRank gpr(ctx(), g, in, od, false, true);
+        gpr.prepareGS();
+        (gpr.gsColored() ? colored : natural)++;
+        cpu::PrOptions conv;
+        conv.tol = 1e-10;
+        conv.iters = 1000;
+        std::vector<double> refConv(g.n), jac(g.n);
+        cpu::pagerankSerial(in, od.data(), refConv.data(), conv);
+        cpu::PrOptions co;
+        co.tol = 1e-6;
+        co.iters = 1000;
+        cpu::pagerankSerial(in, od.data(), jac.data(), co);
+        const cpu::PrCheck jacobiErr = cpu::checkRanks(refConv, jac.data());
+        for (uint32_t tg : {32u, 256u, 1024u}) {
+            struct Run { const char* what; double tol; int iters; };
+            for (Run run : {Run{"20 sweeps", 0.0, 20}, Run{"200 sweeps", 0.0, 200}, Run{"tol 2.5e-7", 2.5e-7, 1000}}) {
+                gpu::GpuPrOptions o;
+                o.tol = run.tol;
+                o.iters = run.iters;
+                o.tg = tg;
+                gpu::GpuPrResult r = gpr.run(gpu::PrVariant::PullGS, o);
+                cpu::PrCheck c = cpu::checkRanks(refConv, gpr.ranks());
+                bool ok = run.iters == 20   ? std::fabs(c.sum - 1.0) < 1e-4
+                          : run.iters == 200 ? c.ok()
+                                             : cpu::gsNoWorseThanJacobi(c, jacobiErr);
+                if (!ok) {
+                    failures++;
+                    std::printf("    %s %s %s tg %u: L1 %.3g rel %.3g sum %.8f (%d it; Jacobi@1e-6 L1 %.3g rel %.3g)\n",
+                                name.c_str(), gpr.gsColored() ? "colored" : "natural", run.what, tg, c.l1,
+                                c.maxRelTop, c.sum, r.iters, jacobiErr.l1, jacobiErr.maxRelTop);
+                }
+            }
+        }
+    }
+    CHECK(failures == 0);
+    CHECK(colored > 0);
+    CHECK(natural > 0);
+}
+
 // ---------------------------------------------------------------- Phase 9
 
 // Every ordering is a permutation; permute() then the inverse permutation

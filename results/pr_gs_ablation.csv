@@ -1,0 +1,25 @@
+timestamp,git_commit,chip,dataset,n,m,ordering,algo,variant,params,source,trial,time_ms_e2e,time_ms_gpu,gteps,iters,validated,load1
+2026-10-19T23:02:27,345ff32+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,0,12.1410,3.8175,0.683142,47,0,2.31
+2026-10-19T23:02:27,345ff32+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,1,11.4760,3.8132,0.722728,47,0,2.31
+2026-10-19T23:02:27,345ff32+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,0,11.6072,3.1578,0.744965,49,0,2.31
+2026-10-19T23:02:27,345ff32+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,1,11.4192,3.1494,0.757227,49,0,2.31
+2026-10-19T23:02:47,345ff32+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,0,67.2014,60.0946,2.582854,34,0,2.45
+2026-10-19T23:02:47,345ff32+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,1,67.5919,60.0820,2.567932,34,0,2.45
+2026-10-19T23:02:47,345ff32+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,0,62.9483,55.0008,2.595167,32,0,2.45
+2026-10-19T23:02:47,345ff32+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,1,61.6672,54.9175,2.649080,32,0,2.45
+2026-10-19T23:02:59,345ff32+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,0,89.2033,77.4546,3.349578,54,0,2.43
+2026-10-19T23:02:59,345ff32+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,1,88.6237,77.5479,3.371487,54,0,2.43
+2026-10-19T23:02:59,345ff32+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,0,211.2305,197.6054,1.362148,52,0,2.43
+2026-10-19T23:02:59,345ff32+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,1,216.2423,204.4666,1.330577,52,0,2.43
+2026-10-19T23:03:54,345ff32+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,0,207.5846,201.7439,3.687962,25,0,2.24
+2026-10-19T23:03:54,345ff32+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,1,204.8334,198.8075,3.737496,25,0,2.24
+2026-10-19T23:03:55,345ff32+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,0,191.0069,185.2077,4.008044,25,0,2.24
+2026-10-19T23:03:55,345ff32+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,1,191.5798,185.5502,3.996059,25,0,2.24
+2026-10-19T23:06:14,345ff32+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,0,607.5142,599.6887,3.944992,35,0,2.21
+2026-10-19T23:06:14,345ff32+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,1,602.1882,594.4612,3.979883,35,0,2.21
+2026-10-19T23:06:17,345ff32+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,0,673.5769,665.1070,3.964715,39,0,2.21
+2026-10-19T23:06:17,345ff32+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,1,671.6345,662.9054,3.976181,39,0,2.21
+2026-10-19T23:07:57,345ff32+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,0,1694.4636,1686.3339,4.426088,32,0,1.96
+2026-10-19T23:07:57,345ff32+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_adaptive,tol=1e-06 cap=1000 tg=256 inplace small_max=16 large_min=256,,1,1725.7467,1717.0835,4.345855,32,0,1.96
+2026-10-19T23:08:02,345ff32+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,0,1670.7868,1663.0676,4.488811,32,0,1.88
+2026-10-19T23:08:02,345ff32+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_vector,tol=1e-06 cap=1000 tg=256 inplace,,1,1643.4096,1636.4600,4.563589,32,0,1.88

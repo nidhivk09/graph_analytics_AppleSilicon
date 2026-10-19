@@ -33,6 +33,10 @@ and PageRank must have L1 error < 1e-4. The full write-up with all figures is
   degree-adaptive kernel is within 10% of the best everywhere. Against GAP the GPU
   is 1.0–2.6× faster per iteration, but GAP's Gauss–Seidel needs ~40% fewer
   iterations and **reaches convergence first on every graph**.
+- **In-place (Gauss–Seidel-style) GPU PageRank** (`gpu_pull_gs`, Phase 12) cuts
+  sweeps by up to ~47%, but vertices updated in the same GPU wave stay at Jacobi
+  speed. At equal accuracy it is 1.14–1.39× faster than Jacobi on Orkut,
+  web-Google and roadNet-CA, and 0.8–0.9× on the other three (report 4.13).
 - **Orderings:** random labels cost 2–3× in PageRank. Reverse Cuthill–McKee helps
   PageRank (up to 2.3× on web-Google) but slows bottom-up BFS on social graphs,
   because it delays early exits.
@@ -103,8 +107,11 @@ kernel-only time (`time_ms_gpu`).
 
 PageRank variants: `cpu_serial` (double, reference), `cpu_omp`, `gpu_push`
 (float atomics, simdgroup-aggregated), `gpu_pull_scalar` (thread per vertex),
-`gpu_pull_vector` (simdgroup per vertex) and `gpu_pull_adaptive` (vertices
-binned by in-degree; `--small-max 16 --large-min 256`).
+`gpu_pull_vector` (simdgroup per vertex), `gpu_pull_adaptive` (vertices
+binned by in-degree; `--small-max 16 --large-min 256`) and `gpu_pull_gs`
+(in-place updates with a per-graph update order: colored or natural; validated
+against the converged reference, see `--ref-tol`). `--inplace` makes any pull
+variant update in place (experiments).
 
 ```sh
 ./scripts/bench_bfs.sh results/bfs_gpu.csv gpu_vertex gpu_naive gpu_binned gpu_edge   # all datasets, validated
@@ -124,6 +131,7 @@ make && make test                        # zero-warning build + 24 test groups
                                          #  Low Power Mode unless FORCE=1; logs in logs/)
 ./scripts/run_all.sh pr reorder plots    # or just some stages
 ./scripts/run_all.sh tuning_balanced tuning_do tuning_tg   # the parameter sweeps (not rerun by default)
+./scripts/run_all.sh gs                  # gpu_pull_gs benchmark (~20 min, Phase 12)
 ./scripts/gap.sh                         # GAP baseline: clones gapbs (pinned) into external/, builds
                                          # with libomp, runs it on our graphs and sources (~6 min)
 .venv/bin/python analysis/plots.py       # regenerate the 11 figures (PNG + SVG) from results/

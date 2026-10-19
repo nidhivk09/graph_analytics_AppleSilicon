@@ -15,11 +15,12 @@ est() {  # minutes (bash 3.2 on macOS has no associative arrays)
     test) echo 2;; micro) echo 1;; stats) echo 3;; bfs_cpu) echo 25;; scaling) echo 30;;
     bfs_gpu) echo 30;; star) echo 1;; hybrid_sweep) echo 12;; pr) echo 15;; reorder) echo 32;;
     networkx) echo 3;; plots) echo 1;; tuning_balanced) echo 20;; tuning_do) echo 10;;
-    tuning_tg) echo 12;; *) echo 10;;
+    tuning_tg) echo 12;; gs) echo 20;; *) echo 10;;
   esac
 }
 # Tuning sweeps (Phase 5/6/10) are not rerun by default: their CSVs record how
 # the defaults were chosen. Run them explicitly: tuning_balanced tuning_do tuning_tg.
+# Extensions are also explicit: gs (Phase 12, gpu_pull_gs); GAP is scripts/gap.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -75,6 +76,7 @@ stage() {
     tuning_balanced) ./scripts/sweep_balanced.sh ;;
     tuning_do)       ./scripts/sweep_do.sh ;;
     tuning_tg)       ./scripts/sweep_tg.sh ;;
+    gs)      rm -f results/pr_gs.csv results/pr_gs_equal.csv results/pr_gs_ablation.csv; ./scripts/bench_gs.sh ;;
     *) echo "unknown stage '$s'" >&2; return 2 ;;
   esac 2>&1 | tee -a "$log"
   # A validation failure inside a stage makes gbench exit non-zero; with

@@ -12,6 +12,7 @@
 //          [--validate] [--trace trace.csv] [--csv results/bfs.csv] [--ordering original]
 //   gbench --graph data/soc-LiveJournal1.bin --algo pr --variant gpu_pull_vector
 //          [--iters 20 | --tol 1e-6 [--iters 1000]] [--tg 256] [--small-max 16 --large-min 256]
+//          [--inplace] [--ref-tol T]   (Phase 12: gpu_pull_gs / in-place validation)
 //          [--threads 8] [--warmup 2] [--trials 5] [--validate] [--csv results/pr.csv]
 //          [--dump-ranks out.f64]
 //   gbench --graph synth:star100k ...         use a generated test graph
@@ -415,13 +416,17 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
 // ms per iteration. --tol runs to convergence (--iters becomes the cap,
 // default 1000) and reports the iteration count. Validation (PLAN.md 7):
 // cpu_serial (double) in the same mode; L1 < 1e-4, max relative error on the
-// top-1000 vertices < 1e-3, sum 1 +- 1e-4.
+// top-1000 vertices < 1e-3, sum 1 +- 1e-4. gpu_pull_gs and --inplace runs
+// (Phase 12) are compared with the converged reference instead: in --tol
+// mode no less accurate than the Jacobi reference (cpu::gsNoWorseThanJacobi;
+// its tol: --ref-tol); in fixed mode, sum 1 per trial plus a 200-sweep run
+// that must meet the PLAN.md 7 tolerances.
 // CSV: source empty; iters = iterations run; gteps = m * iters / time.
 // Effective bandwidth (pull variants, PLAN.md Phase 8): bytes per iteration
 // = 4(n+1) + 4m + 4m + 4n (row_ptr, col_idx, contrib gathers, writes).
 
 const std::vector<std::string> kPrVariants = {"cpu_serial", "cpu_omp", "gpu_push", "gpu_pull_scalar",
-                                              "gpu_pull_vector", "gpu_pull_adaptive"};
+                                              "gpu_pull_vector", "gpu_pull_adaptive", "gpu_pull_gs"};
 
 int runPr(const util::Args& args, const CSR& stored, const std::string& dataset) {
     const std::string variant = args.get("variant", "cpu_serial");
@@ -443,6 +448,7 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
     gopt.tg = (uint32_t)args.getInt("tg", 256);
     gopt.smallMax = (uint32_t)args.getInt("small-max", 16);
     gopt.largeMin = (uint32_t)args.getInt("large-min", 256);
+    gopt.inPlace = args.has("inplace");
 
     util::Timer prep;
     const bool needIn = variant != "gpu_push";
@@ -459,13 +465,32 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
     // Reference in ORIGINAL labels, computed before relabeling so the
     // original transpose is freed before the relabeled graph is built
     // (Orkut: three ~0.9 GB copies at once would exceed the 3 GB budget).
-    std::vector<double> ref;
+    std::vector<double> ref, refConv;
     int refIters = 0;
+    const bool gsCheck = variant == "gpu_pull_gs" || gopt.inPlace;
+    const double refTol = args.getDouble("ref-tol", tol);
+    cpu::PrCheck jacobiErr;  // gsCheck: the Jacobi reference's distance from convergence
     if (validate) {
         CSR inO = stored.directed() ? graph::transpose(stored) : stored;
         std::vector<uint32_t> odO = cpu::outDegrees(stored);
         ref.resize(stored.n);
         refIters = cpu::pagerankSerial(inO, odO.data(), ref.data(), copt).iters;
+        if (gsCheck) {  // see cpu::gsNoWorseThanJacobi
+            // --ref-tol: the Jacobi reference's tolerance, if it should differ from
+            // --tol (equal-accuracy runs: GS at a tighter tol vs Jacobi at 1e-6).
+            if (refTol != tol) {
+                cpu::PrOptions jo = copt;
+                jo.tol = refTol;
+                jo.iters = refTol > 0 ? 1000 : copt.iters;
+                refIters = cpu::pagerankSerial(inO, odO.data(), ref.data(), jo).iters;
+            }
+            cpu::PrOptions conv = copt;
+            conv.tol = 1e-10;
+            conv.iters = 1000;
+            refConv.resize(stored.n);
+            cpu::pagerankSerial(inO, odO.data(), refConv.data(), conv);
+            jacobiErr = cpu::checkRanks(refConv, ref.data());
+        }
     }
 
     CSR graphP = permuted ? graph::permute(stored, perm) : stored;  // what the variant runs on
@@ -477,17 +502,23 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
         ctx = std::make_unique<gpu::MetalContext>();
         gpr = std::make_unique<gpu::GpuPageRank>(*ctx, graphP, in, outdeg, variant == "gpu_push", needIn);
         if (variant == "gpu_pull_adaptive") gpr->prepareAdaptive(gopt.smallMax, gopt.largeMin);
+        if (variant == "gpu_pull_gs") gpr->prepareGS();
         in = CSR{};      // the GPU has its own copies; drop the host ones
         graphP = CSR{};
     }
     const double prepMs = prep.ms();
     const uint64_t n = stored.n, m = stored.m;
 
-    std::string params = tol > 0 ? "tol=" + std::to_string(tol).substr(0, 8) + " cap=" + std::to_string(copt.iters)
+    char tolStr[32];  // %g: tolerances below 1e-6 must not print as 0.000000
+    std::snprintf(tolStr, sizeof tolStr, "%g", tol);
+    std::string params = tol > 0 ? std::string("tol=") + tolStr + " cap=" + std::to_string(copt.iters)
                                  : "iters=" + std::to_string(copt.iters);
     if (variant == "cpu_omp")
         params += " threads=" + std::to_string(copt.threads > 0 ? copt.threads : omp_get_max_threads());
     if (gpuVariant) params += " tg=" + std::to_string(gopt.tg);
+    if (gopt.inPlace) params += " inplace";
+    if (variant == "gpu_pull_gs")
+        params += gpr->gsColored() ? " order=colored sets=" + std::to_string(gpr->gsSets()) : " order=natural";
     if (variant == "gpu_pull_adaptive")
         params += " small_max=" + std::to_string(gopt.smallMax) + " large_min=" + std::to_string(gopt.largeMin);
     std::printf("%s: n %llu, m %llu (directed=%d), ordering %s, prep %.0f ms\npr %s [%s]\n", dataset.c_str(),
@@ -547,10 +578,20 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
         double ms = timer.ms();
         iters = it;
         if (validate) {
-            cpu::PrCheck c = check(ref);
-            if (!c.ok()) {
-                std::fprintf(stderr, "VALIDATION FAILED: %s trial %d: L1 %.3g, max rel (top-1000) %.3g, sum %.8f\n",
+            cpu::PrCheck c = check(gsCheck ? refConv : ref);
+            // GS, fixed iterations: k sweeps have no reference trajectory to match
+            // (they can be more or less accurate than k Jacobi iterations, e.g.
+            // ego-Facebook 1.2x less), so per trial only the renormalized sum is
+            // checked; convergence to the right vector is checked after the trials.
+            bool ok = !gsCheck ? c.ok()
+                      : tol > 0 ? cpu::gsNoWorseThanJacobi(c, jacobiErr)
+                                : std::fabs(c.sum - 1.0) < 1e-4;
+            if (!ok) {
+                std::fprintf(stderr, "VALIDATION FAILED: %s trial %d: L1 %.6g, max rel (top-1000) %.6g, sum %.8f\n",
                              variant.c_str(), t, c.l1, c.maxRelTop, c.sum);
+                if (gsCheck)
+                    std::fprintf(stderr, "  (vs converged reference; Jacobi reference: L1 %.6g, max rel %.6g, "
+                                 "sum %.8f)\n", jacobiErr.l1, jacobiErr.maxRelTop, jacobiErr.sum);
                 return 1;
             }
             if (c.l1 >= worst.l1) worst = c;
@@ -581,7 +622,31 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
             double bytes = 4.0 * (n + 1) + 8.0 * m + 4.0 * n;
             std::printf(" | eff. %.1f GB/s, %.3f Ggathers/s", bytes / (perIt * 1e6), m / (perIt * 1e6));
         }
-        if (validate)
+        if (validate && gsCheck && tol <= 0) {
+            // Fixed-iteration GS: the same kernels, run for 200 sweeps (untimed), must
+            // reach the converged reference within the PLAN.md 7 tolerances. Not a
+            // tol run: GS-on-GPU converges unevenly (vertices updated in the same
+            // wave, e.g. a 2-cycle with adjacent ids in soc-Pokec, still decay only
+            // at the Jacobi rate d), so a global L1-change test can stop while they
+            // are 30x off. Every mode decays at least by d per sweep: d^200 ~ 1e-14.
+            gpu::GpuPrOptions conv = gopt;
+            conv.tol = 0;
+            conv.iters = 200;
+            gpr->run(gpu::parsePrVariant(variant), conv);
+            cpu::PrCheck c = check(refConv);
+            if (!c.ok()) {
+                std::printf("\n");
+                std::fprintf(stderr, "VALIDATION FAILED: %s after 200 sweeps vs converged reference: L1 %.6g, "
+                             "max rel (top-1000) %.6g, sum %.8f\n", variant.c_str(), c.l1, c.maxRelTop, c.sum);
+                return 1;
+            }
+            std::printf(" | validated OK (200-sweep run vs converged ref: L1 %.2e, top-1000 rel %.2e; "
+                        "after %d sweeps L1 %.2e vs Jacobi %.2e)", c.l1, c.maxRelTop, iters, worst.l1, jacobiErr.l1);
+        } else if (validate && gsCheck)
+            std::printf(" | validated OK vs converged ref (worst L1 %.2e, top-1000 rel %.2e, sum-1 %.1e; "
+                        "Jacobi ref %d iters: L1 %.2e, top-1000 rel %.2e)", worst.l1, worst.maxRelTop, worst.sum - 1.0,
+                        refIters, jacobiErr.l1, jacobiErr.maxRelTop);
+        else if (validate)
             std::printf(" | validated OK (ref %d iters; worst L1 %.2e, top-1000 rel %.2e, sum-1 %.1e)", refIters,
                         worst.l1, worst.maxRelTop, worst.sum - 1.0);
         std::printf("\n");

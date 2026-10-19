@@ -4,7 +4,7 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 11 complete** (2026-10-19). All PLAN phases 0–11 are done. GAP baseline: `scripts/gap.sh` (GAP in gitignored `external/gapbs`, pinned to 941462c).
+- **Phase 12 (extension beyond PLAN) complete** (2026-10-19): in-place GPU PageRank `gpu_pull_gs`. All PLAN phases 0–11 are done. GAP baseline: `scripts/gap.sh` (GAP in gitignored `external/gapbs`, pinned to 941462c).
 - Final results: `docs/REPORT.md` (11 figures in `figures/`, all from one `scripts/run_all.sh` run on AC power).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
@@ -786,3 +786,56 @@ PageRank `gpu_pull_adaptive`:
 
 **Open issues / notes**
 - None blocking. Possible follow-ups: GPU in-place (Gauss–Seidel) PageRank; P-core-only OpenMP; indirect dispatch for BFS.
+
+### 2026-10-19 · Phase 12 (extension): in-place (Gauss–Seidel-style) GPU PageRank
+
+Not in PLAN.md. Requested after Phase 11 showed GAP's Gauss–Seidel PageRank converging first on every graph.
+
+**Built**
+- **Shader:** pull kernels take `PrParams::inplace`. `pr_store` writes `r_new[v]` and, in place mode, also `contrib[v] = r/outdeg`, so later threads in the same sweep pull new values. New kernels `pr_sum` / `pr_scale` renormalize the ranks to sum 1 after each sweep (in-place mode only). The Jacobi kernels are unchanged in speed (A/B on the same binary, LiveJournal: vector 14.1 vs 14.2, adaptive 15.2 vs 15.7 ms/iteration).
+- **`gpu_pull_gs`** (`GpuPageRank::prepareGS`) picks an update order per graph:
+  - **colored:** ≤ 8 Jones–Plassmann rounds on the in-CSR (hash priorities), used if they cover ≥ 95% of vertices. Runs on a private relabeled copy of the in-CSR so that each set is a contiguous ID range; `ranks()` maps the result back lazily (untimed).
+  - **natural:** otherwise, one in-place `gpu_pull_vector` dispatch.
+- **gbench additions:**
+  - `--inplace`: any pull variant updates in place (experiments)
+  - `--ref-tol`: the tolerance of the Jacobi reference used to validate GS runs
+  - tol in `params` is now printed with `%g`. It used to be `to_string(tol).substr(0,8)`, so every tol < 1e-6 was recorded as `0.000000`.
+- `scripts/bench_gs.sh` → `results/pr_gs.csv` (fixed 20), `pr_gs_equal.csv` (equal-accuracy runs), `pr_gs_ablation.csv` (in-place with natural vs degree-bin order). `run_all.sh gs` runs it (optional stage).
+- `report_tables.py gs gs_ablation`; report section 4.13.
+- **Tests: 25/25.** New `pagerank_gs_converges_to_reference`: every synthetic graph, both orders, tg 32/256/1024. It checks:
+  - 20 sweeps: sum = 1
+  - 200 sweeps: PLAN tolerances vs the converged reference
+  - tol 2.5e-7: no less accurate than Jacobi at 1e-6
+
+  Mutation checks (each caught): no renormalization; a wrong in-place contribution.
+
+**Validation rule for GS (no PLAN tolerance was changed)**
+- PLAN.md 7 compares a variant with `cpu_serial` *run the same way*, i.e. the same Jacobi trajectory, so in practice it measures float rounding. A Gauss–Seidel iterate is a different vector, so gbench compares it with the **converged** reference (tol 1e-10) instead:
+  - **tol mode:** `cpu::gsNoWorseThanJacobi`. Each metric must be within its PLAN tolerance or no worse than the Jacobi reference's own distance from convergence. The sum gets the L1 budget, since |sum−1| ≤ L1 and Jacobi conserves mass exactly. The top-1000 relative bound gets 1e-4 relative slack for float-vs-double rounding (roadNet after 20 iterations: both 0.022463 at the same unconverged vertex).
+  - **fixed mode:** sum = 1 per trial, plus an untimed 200-sweep run that must meet the PLAN tolerances vs converged.
+- **Why not "20 GS sweeps no worse than 20 Jacobi"?** It is false on ego-Facebook (1.1× worse): that is a performance property, not correctness.
+- **Why 200 sweeps, not a tol run?** See the 2-cycle finding below.
+
+**Findings, in the order they came up**
+1. **First version** (in place over the adaptive degree bins, no renormalization): slower than Jacobi on ego-Facebook (56 vs 48 sweeps). A numpy model of block orders reproduced it, and suggested that the degree-bin order was the problem and that ID-ordered chunks or coloring would help.
+2. **Coloring** (numpy): roadNet-CA 57 → 29 sweeps with 8 independent sets. It is useless on the social graphs: after 16 rounds, 67–86% of vertices remain uncolored.
+3. **Interleaved color sets thrash the cache:** roadNet-CA took 4.2 ms per sweep (vs 1.3) until the sets were relabeled to contiguous ranges (1.4–1.6 ms).
+4. **Mass drift:** on rmat12 the GS error after 20 sweeps was 6e-4 vs Jacobi's 6e-8. The total rank drifts with in-place updates, and the drift decays only by d per sweep. Renormalizing after each sweep fixed it (9e-7). **This also invalidated finding 1:** with renormalization, the degree-bin order needs about the same sweeps as natural order (ablation table). The numpy model had the same flaw. The code comment was corrected.
+5. **Uneven convergence (the main result).** soc-Pokec at tol 1e-7 met L1 easily but had top-1000 relative error 2.9e-3. The cause is the 2-cycle 151826 ↔ 151828 (each has outdeg 1, pointing at the other). Being in the same wave, the pair decays at the Jacobi rate d while the rest of the graph converges faster, so the global L1 test stops ~20 sweeps earlier and leaves the pair ~30× off (0.85^-21). The same effect makes GS need a much tighter tol to match Jacobi's accuracy.
+6. **Equal-accuracy benchmark** (strict: L1 and top-1000 relative error both ≤ Jacobi@1e-6). Two full runs gave the same verdict per graph, with speedups within 5%:
+
+| dataset | order | GS tol needed | GS ms (sweeps) | best Jacobi ms (it) | speedup | GAP ms |
+|---|---|---|---|---|---|---|
+| Facebook | natural | 5e-7 | 11.7 (52) | 9.51 (48) | 0.81× | 4.50 |
+| web-Google | natural | 3.1e-8 | 88.6 (46) | 107 (62) | 1.21× | 53.8 |
+| roadNet-CA | colored | 2.5e-7 | 63.6 (33) | 72.7 (57) | 1.14× | 65.0 |
+| Pokec | natural | 3.1e-8 | 352 (46) | 320 (44) | 0.91× | 197 |
+| LiveJournal | natural | 1.25e-7 | 901 (52) | 719 (49) | 0.80× | 650 |
+| Orkut | natural | 1e-6 | 1618 (32) | 2247 (45) | 1.39× | 1522 |
+
+- **Same-tol sweeps** (1e-6): web-Google 62 → 33, Pokec 44 → 25, Orkut 45 → 32, roadNet 57 → 29, but GS is less accurate at those stops.
+- **After 20 sweeps, GS is closer to converged than Jacobi:** 28× Pokec, 24× web-Google, 19× roadNet-CA, 4× LiveJournal/Orkut; 1.1× worse on Facebook.
+- **Verdict:** a partial win. It does not close the gap to GAP except on roadNet-CA (tie). The report's future work now lists orders that separate mutually dependent vertices, and a per-vertex or sampled-residual stopping test.
+
+**Other notes**
+- The first `make test` attempts looked hung: the test process had been started as a zsh background job, which zsh runs at low priority (BG_NICE), while system Contacts daemons used ~90% of a core. The hybrid BFS test (one GPU sync per level) crawled. In the foreground the suite takes 1:39. Benchmarks use the harness's background mode, which is not niced (verified: gbench at nice 0). The final suite run (25/25) took 18 min at 2% CPU after the harness moved it to the background at its 10-min limit; the cause is not identified. GPU-sync-heavy tests crawl there. Benchmarks launched in background mode from the start produced timings consistent with foreground runs (e.g. GAP and run_all vs earlier phases).

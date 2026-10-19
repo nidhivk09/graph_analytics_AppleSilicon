@@ -4,12 +4,15 @@
 // dangling-rank partial sums, then pr_reduce -> scalars[SC_DANGLING];
 // (2) the main kernel (push or one of three pull variants) writes r_new;
 // (3) tol mode only: pr_diff + pr_reduce -> scalars[SC_DELTA] (L1 change).
+// gpu_pull_gs = pr_pull_small over color sets, or pr_pull_vector, with
+// PrParams::inplace set (pr_store); the order is chosen by GpuPageRank::prepareGS.
 // float throughout (Metal has no double); the CPU reference is double.
 // Two-pass reductions with fixed shapes: deterministic (except gpu_push,
 // whose float atomics add in arbitrary order).
 
 constant uint SC_DANGLING = 0;
 constant uint SC_DELTA = 1;
+constant uint SC_SUM = 2;      // gpu_pull_gs: total rank after the sweep (pr_sum)
 
 struct PrParams {
     uint n;
@@ -17,6 +20,7 @@ struct PrParams {
     float base;        // (1 - d) / n
     float inv_n;       // 1 / n
     uint size;         // adaptive: vertices in this bin
+    uint inplace;      // gpu_pull_gs: also write contrib[v] in place (see pr_store)
 };
 
 // Compensated (Kahan) summation for the per-thread loops over in-edges.
@@ -75,6 +79,40 @@ kernel void pr_contrib(device const float* r       [[buffer(0)]],
     }
     dangling = tg_sum_f(dangling, scratch, sid, lane, nsg);
     if (tid == 0) partial[tgid] = dangling;
+}
+
+// gpu_pull_gs mass renormalization (Phase 12). Jacobi with dangling
+// redistribution keeps sum(r) = 1 exactly; in-place updates with the
+// dangling sum from the start of the sweep do not, and the mass error then
+// decays only by a factor d per sweep: a slow mode that Jacobi never has.
+// On rmat12 (many isolated vertices, where Jacobi converges far faster than
+// d per iteration) GS was 10^4 times less accurate than Jacobi after 20
+// sweeps. Scaling r to sum 1 after every sweep removes that mode; the fixed
+// point sums to 1, so the limit is unchanged.
+kernel void pr_sum(device const float* r   [[buffer(0)]],
+                   device float* partial   [[buffer(1)]],
+                   constant PrParams& p    [[buffer(2)]],
+                   uint gid  [[thread_position_in_grid]],
+                   uint grid [[threads_per_grid]],
+                   uint tgid [[threadgroup_position_in_grid]],
+                   uint tid  [[thread_index_in_threadgroup]],
+                   uint sid  [[simdgroup_index_in_threadgroup]],
+                   uint lane [[thread_index_in_simdgroup]],
+                   uint nsg  [[simdgroups_per_threadgroup]])
+{
+    threadgroup float scratch[32];
+    float s = 0;
+    for (uint v = gid; v < p.n; v += grid) s += r[v];
+    s = tg_sum_f(s, scratch, sid, lane, nsg);
+    if (tid == 0) partial[tgid] = s;
+}
+
+kernel void pr_scale(device float* r              [[buffer(0)]],
+                     device const float* scalars  [[buffer(1)]],
+                     constant PrParams& p         [[buffer(2)]],
+                     uint gid [[thread_position_in_grid]])
+{
+    if (gid < p.n) r[gid] /= scalars[SC_SUM];
 }
 
 // L1 change partials: sum |a - b|.
@@ -199,10 +237,34 @@ kernel void pr_push_finalize(device float* acc            [[buffer(0)]],
 #define PULL_ARGS                                                   \
     device const uint* row_ptr   [[buffer(0)]],                     \
     device const uint* col_idx   [[buffer(1)]],                     \
-    device const float* contrib  [[buffer(2)]],                     \
+    device float* contrib        [[buffer(2)]],                     \
     device float* r_new          [[buffer(3)]],                     \
     device const float* scalars  [[buffer(4)]],                     \
-    constant PrParams& p         [[buffer(5)]]
+    constant PrParams& p         [[buffer(5)]],                     \
+    device const uint* outdeg    [[buffer(7)]]
+
+// Stores vertex v's new rank. gpu_pull_gs (Phase 12) also overwrites
+// contrib[v] immediately, so threads that run later in the same sweep pull
+// the NEW value: Gauss-Seidel-style (asynchronous) iteration, which GAP uses
+// on the CPU and which needs ~30-50% fewer iterations than the Jacobi
+// iteration (all reads from the previous sweep) of the other variants.
+// Which neighbors are already updated depends on scheduling, so results are
+// not bit-reproducible; any mix of old and new values is a valid
+// asynchronous iteration of the same contraction, with the same fixed point.
+// The dangling term still comes from the start of the sweep (pr_contrib):
+// it is consistent at the fixed point, so the limit is unchanged and
+// validation can use the PLAN.md 7 reference. Concurrent plain 4-byte
+// loads/stores of contrib (no atomics): a thread never relies on seeing
+// another thread's write, only on reading some complete old or new value.
+static inline void pr_store(device float* r_new, device float* contrib, device const uint* outdeg,
+                            uint v, float val, constant PrParams& p)
+{
+    r_new[v] = val;
+    if (p.inplace) {
+        uint d = outdeg[v];
+        contrib[v] = d ? val / float(d) : 0.0f;
+    }
+}
 
 // gpu_pull_scalar: thread per vertex walks its in-list. Neighboring threads
 // read unrelated lists (uncoalesced col_idx) and hubs stall their simdgroup.
@@ -211,7 +273,7 @@ kernel void pr_pull_scalar(PULL_ARGS, uint gid [[thread_position_in_grid]])
     if (gid >= p.n) return;
     Kahan s;
     for (uint e = row_ptr[gid]; e < row_ptr[gid + 1]; ++e) s.add(contrib[col_idx[e]]);
-    r_new[gid] = pr_value(s.sum, p, scalars);
+    pr_store(r_new, contrib, outdeg, gid, pr_value(s.sum, p, scalars), p);
 }
 
 // gpu_pull_vector: simdgroup per vertex; lanes stride the in-list (32
@@ -226,7 +288,7 @@ kernel void pr_pull_vector(PULL_ARGS,
     Kahan k;
     for (uint e = row_ptr[v] + lane; e < row_ptr[v + 1]; e += 32) k.add(contrib[col_idx[e]]);
     float s = simd_sum(k.sum);
-    if (lane == 0) r_new[v] = pr_value(s, p, scalars);
+    if (lane == 0) pr_store(r_new, contrib, outdeg, v, pr_value(s, p, scalars), p);
 }
 
 // gpu_pull_adaptive: vertices pre-binned by in-degree (once; bins are fixed
@@ -246,7 +308,7 @@ kernel void pr_pull_small(PULL_ARGS,
     uint v = verts[gid];
     Kahan s;
     for (uint e = row_ptr[v]; e < row_ptr[v + 1]; ++e) s.add(contrib[col_idx[e]]);
-    r_new[v] = pr_value(s.sum, p, scalars);
+    pr_store(r_new, contrib, outdeg, v, pr_value(s.sum, p, scalars), p);
 }
 
 // Medium bin: simdgroup per vertex (as gpu_pull_vector, over the bin list).
@@ -261,7 +323,7 @@ kernel void pr_pull_medium(PULL_ARGS,
     Kahan k;
     for (uint e = row_ptr[v] + lane; e < row_ptr[v + 1]; e += 32) k.add(contrib[col_idx[e]]);
     float s = simd_sum(k.sum);
-    if (lane == 0) r_new[v] = pr_value(s, p, scalars);
+    if (lane == 0) pr_store(r_new, contrib, outdeg, v, pr_value(s, p, scalars), p);
 }
 
 // Large bin: threadgroup per vertex, threadgroup reduction.
@@ -280,5 +342,5 @@ kernel void pr_pull_large(PULL_ARGS,
     Kahan k;
     for (uint e = row_ptr[v] + tid; e < row_ptr[v + 1]; e += tgsz) k.add(contrib[col_idx[e]]);
     float s = tg_sum_f(k.sum, scratch, sid, lane, nsg);
-    if (tid == 0) r_new[v] = pr_value(s, p, scalars);
+    if (tid == 0) pr_store(r_new, contrib, outdeg, v, pr_value(s, p, scalars), p);
 }

@@ -25,6 +25,11 @@ the CPU, working in place on the GPU's buffers (no copies, thanks to unified mem
   PageRank (and 1.5–4.8× faster than our weaker `cpu_omp`).
 - **To convergence, GAP wins on every graph (1.1–2.1×).** Its Gauss–Seidel updates
   need 29–34 iterations where the GPU's Jacobi iteration needs 44–62.
+- An in-place (Gauss–Seidel-style) GPU kernel (Phase 12) cuts sweeps by up to
+  ~47% at the same tolerance, but converges unevenly: vertices updated in the same
+  GPU wave stay at Jacobi speed. **At equal accuracy it is 1.1–1.4× faster than
+  Jacobi on three graphs and 0.8–0.9× on the other three**, and it still does not
+  beat GAP except on roadNet-CA (a tie).
 - Real input orderings already carry most of the available locality: random labels
   slow PageRank 2–3×. Reverse Cuthill–McKee (RCM) improves on the input order for
   PageRank but *hurts* direction-optimizing BFS, because it delays bottom-up
@@ -535,9 +540,101 @@ Two caveats make this comparison indicative, not exact:
   in-place updates race.
 
 Still, the lesson is clear. **The algorithmic choice (Gauss–Seidel vs Jacobi) is
-worth as much as the hardware choice here.** The GPU kernels could adopt it:
-in-place, race-tolerant updates need no synchronization beyond what the pull
-kernels already do. It is listed as future work.
+worth as much as the hardware choice here.** Section 4.13 tries it on the GPU.
+
+### 4.13 In-place (Gauss–Seidel-style) PageRank on the GPU (Phase 12)
+
+**The variant.** `gpu_pull_gs` writes each vertex's new contribution `r/outdeg`
+back in place as soon as it is computed, so threads that run later in the same
+sweep pull the new value. Any mix of old and new values is a valid asynchronous
+iteration with the same fixed point. Three design points came from measurements:
+
+- **The ranks are renormalized to sum 1 after every sweep.** Jacobi with
+  dangling redistribution keeps the total at exactly 1. In-place updates (with
+  the dangling sum taken at the start of the sweep) let it drift, and that error
+  decays only by d = 0.85 per sweep. Without renormalization this was the slowest
+  mode: on rmat12 the error after 20 sweeps was 6e-4 instead of 9e-7.
+- **The update order is chosen per graph.** A GPU sweep updates tens of thousands
+  of vertices at once, so a vertex only benefits from in-neighbors updated in an
+  *earlier* wave.
+  - **Colored order:** used when up to 8 rounds of Jones–Plassmann coloring cover
+    ≥ 95% of vertices (here only roadNet-CA: 9 sets). Every edge then crosses
+    sets, so one endpoint always sees a fresh value.
+  - **Natural order:** used otherwise. One in-place `gpu_pull_vector` dispatch;
+    waves run roughly in ID order.
+- **Colored mode relabels vertices so each set is contiguous.** Dispatching
+  interleaved sets over the original layout made every dispatch touch every
+  cache line of the CSR, and cost 4.2 ms per sweep on roadNet-CA instead of 1.6.
+
+**Validation.** A Gauss–Seidel iterate is not the same vector as a Jacobi
+iterate, so the usual same-trajectory check does not apply. It is replaced by:
+- **Fixed mode:** a 200-sweep run must meet the PLAN tolerances against the
+  converged reference (tol 1e-10). The ranks must sum to 1 in every timed trial.
+- **Convergence mode:** a run must be no less accurate than Jacobi at its tol.
+
+The unit test covers all synthetic graphs and both orders, and catches two
+deliberately sabotaged shaders (no renormalization; a wrong in-place
+contribution).
+
+**Results.** Sweeps to tol 1e-6:
+
+| dataset | Jacobi | in-place, natural order | in-place, degree-bin order | gpu_pull_gs |
+|---|---|---|---|---|
+| Facebook | 48 | 49 | 47 | 49 |
+| web-Google | 62 | 32 | 34 | 33 |
+| roadNet-CA | 57 | 52 | 54 | **29** (colored) |
+| Pokec | 44 | 25 | 25 | 25 |
+| LiveJournal | 49 | 39 | 35 | 39 |
+| Orkut | 45 | 32 | 32 | 32 |
+
+After 20 sweeps it is far closer to the converged answer than 20 Jacobi
+iterations, in L1: 28× on Pokec, 24× on web-Google, 19× on roadNet-CA, 4× on
+LiveJournal and Orkut. On ego-Facebook it is 1.1× worse.
+
+**But fewer sweeps to the same tol does not mean the same answer.** Most vertices
+converge faster, but vertices updated *in the same wave* still read each other's
+old values and converge only at the Jacobi rate. The clearest case is a 2-cycle
+in soc-Pokec: vertices 151826 and 151828 each have one out-edge, to each other.
+Their adjacent IDs put them in the same simdgroup, so the pair decays by 0.85 per
+sweep, as in Jacobi. The global L1-change test stops after 25–37 sweeps instead
+of 44–58, and at that point the pair is ~30× further off than under Jacobi
+(top-1000 relative error 1.5e-2 vs 1.1e-3 at tol 1e-6). GAP processes the pair
+sequentially within one thread, so it does not have this problem.
+
+**Comparison at equal accuracy.** Jacobi is run to 1e-6. `gpu_pull_gs` is run to
+the loosest tol at which both its L1 error and its worst top-1000 relative error
+(vs the converged reference) are no larger:
+
+| dataset | order | ms/sweep GS / best Jacobi | best Jacobi to 1e-6, ms (it) | GS tol needed | GS ms (sweeps) | speedup | GAP to 1e-6, ms |
+|---|---|---|---|---|---|---|---|
+| Facebook | natural | 0.06 / 0.021 | 9.51 (48) | 5e-07 | 11.7 (52) | 0.81× | 4.50 |
+| web-Google | natural | 1.66 / 1.43 | 107 (62) | 3.1e-08 | 88.6 (46) | **1.21×** | 53.8 |
+| roadNet-CA | colored | 1.57 / 0.80 | 72.7 (57) | 2.5e-07 | 63.6 (33) | **1.14×** | 65.0 |
+| Pokec | natural | 7.29 / 6.84 | 320 (44) | 3.1e-08 | 352 (46) | 0.91× | 197 |
+| LiveJournal | natural | 15.9 / 14.0 | 719 (49) | 1.25e-07 | 901 (52) | 0.80× | 650 |
+| Orkut | natural | 49.9 / 49.0 | 2247 (45) | 1e-06 | 1618 (32) | **1.39×** | 1522 |
+
+- **Net effect:**
+  - a win on Orkut (1.39×), web-Google (1.21×) and roadNet-CA (1.14×)
+  - a loss on LiveJournal (0.80×), Pokec (0.91×) and Facebook (0.81×)
+- **Per-sweep cost.** Each sweep costs 2–16% more than the best Jacobi kernel
+  because of the renormalization passes. On roadNet-CA it costs 2× more: the
+  colored layout gives up the input order's locality, which 2× fewer sweeps
+  more than repays.
+- **The tol needed is not fully stable.** It sits near a boundary on some graphs,
+  and GPU in-place updates are not deterministic: web-Google needed 6.25e-8 in
+  one run and 3.1e-8 in another.
+- **Against GAP,** `gpu_pull_gs` ties on roadNet-CA (63.6 vs 65.0 ms) and is
+  1.06× slower on Orkut. GAP's stopping test is also an in-sweep L1 change, but
+  its sequential per-thread order does not leave in-wave pairs behind.
+
+**Conclusion.** Gauss–Seidel's advantage depends on *dependent vertices being
+updated in sequence*. A GPU gets that only across waves or across color sets.
+Coloring delivers it for low-degree graphs. For skewed graphs, eight
+Jones–Plassmann rounds leave most vertices uncolored, and the natural order's
+gain is partly an illusion of the stopping test. Making it work on social graphs
+would need either an order that separates mutually dependent vertices (e.g.
+coloring only the slow structures) or a per-vertex convergence test.
 
 ## 5. Summary of hypotheses (PLAN §10)
 
@@ -550,6 +647,7 @@ kernels already do. It is listed as future work.
 | Random ordering much slower; RCM/degree may improve | **Confirmed for random** (1.9–3.1×). RCM helps PageRank (up to 2.3×) but hurts DO-BFS on social graphs; degree helps only web-Google |
 | Smaller graphs have higher GTEPS due to the cache | **Wrong for BFS** (fixed per-level costs dominate small graphs). Weakly true for PageRank, where locality matters more |
 | (Phase 11) GAP as the state-of-the-art CPU baseline | Our `cpu_do` matches GAP's BFS; the hybrid beats it 1.7–2.3× on social graphs. GAP's PageRank nearly ties the GPU per iteration on Pokec/Orkut and wins to convergence through Gauss–Seidel |
+| (Phase 12) In-place updates would bring Gauss–Seidel's gain to the GPU | **Partly.** Same-tol sweeps drop up to ~47%, but in-wave dependencies stay at Jacobi speed; at equal accuracy 1.14–1.39× faster on 3 graphs, 0.8–0.9× on 3 |
 
 ## 6. Limitations
 
@@ -586,10 +684,11 @@ kernels already do. It is listed as future work.
   could combine RCM's PageRank locality with fast bottom-up exits (4.8).
 - **Restrict OpenMP to P-cores** (thread affinity / QoS classes) for barrier-heavy
   phases, and give E-cores only independent work.
-- **Gauss–Seidel (in-place) PageRank on the GPU.** GAP's in-place updates need
-  31–48% fewer iterations (4.12). A GPU pull kernel that writes the new
-  contribution in place would get most of that benefit. Validation would then
-  need a convergence-based check rather than iteration-count agreement.
+- **Better update orders for in-place GPU PageRank (4.13).** For example, color
+  only the vertices that converge slowly (short cycles, mutual links), or place
+  mutually dependent vertices in different waves. Also a per-vertex or
+  sampled-residual stopping test, so the global L1 change cannot hide in-wave
+  stragglers.
 - **Compressed or 16-bit-delta CSR** to fit larger graphs in 8 GB and to reduce
   bytes per edge on this bandwidth-bound chip.
 - **Asynchronous / delta PageRank**, which touches only vertices whose rank still
@@ -616,5 +715,5 @@ kernels already do. It is listed as future work.
 
 ---
 *Reproduce:* `./scripts/run_all.sh` (≈75 min on this machine; the tuning sweeps run
-only when named: `./scripts/run_all.sh tuning_balanced tuning_do tuning_tg`); GAP baseline: `./scripts/gap.sh` (≈6 min). Figures: `.venv/bin/python analysis/plots.py`. Tables:
+only when named: `./scripts/run_all.sh tuning_balanced tuning_do tuning_tg`); GAP baseline: `./scripts/gap.sh` (≈6 min); `gpu_pull_gs`: `./scripts/run_all.sh gs` (≈20 min). Figures: `.venv/bin/python analysis/plots.py`. Tables:
 `.venv/bin/python analysis/report_tables.py`.

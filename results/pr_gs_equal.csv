@@ -1,0 +1,19 @@
+timestamp,git_commit,chip,dataset,n,m,ordering,algo,variant,params,source,trial,time_ms_e2e,time_ms_gpu,gteps,iters,validated,load1
+2026-10-19T23:02:27,345ff32+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_gs,tol=5e-07 cap=1000 tg=256 order=natural,,0,12.6769,3.4102,0.737782,53,1,2.31
+2026-10-19T23:02:27,345ff32+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_gs,tol=5e-07 cap=1000 tg=256 order=natural,,1,11.6964,3.3485,0.784543,52,1,2.31
+2026-10-19T23:02:27,345ff32+,Apple M2,ego-Facebook,4039,176468,original,pr,gpu_pull_gs,tol=5e-07 cap=1000 tg=256 order=natural,,2,10.9060,2.5817,0.841399,52,1,2.31
+2026-10-19T23:02:46,345ff32+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_gs,tol=3.125e-08 cap=1000 tg=256 order=natural,,0,94.6815,84.0595,2.641982,49,1,2.45
+2026-10-19T23:02:46,345ff32+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_gs,tol=3.125e-08 cap=1000 tg=256 order=natural,,1,86.6260,77.1292,2.651938,45,1,2.45
+2026-10-19T23:02:46,345ff32+,Apple M2,web-Google,875713,5105039,original,pr,gpu_pull_gs,tol=3.125e-08 cap=1000 tg=256 order=natural,,2,88.6039,78.7580,2.650355,46,1,2.45
+2026-10-19T23:02:58,345ff32+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_gs,tol=2.5e-07 cap=1000 tg=256 order=colored sets=9,,0,63.7495,56.6030,2.864273,33,1,2.43
+2026-10-19T23:02:58,345ff32+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_gs,tol=2.5e-07 cap=1000 tg=256 order=colored sets=9,,1,63.5507,56.4539,2.873236,33,1,2.43
+2026-10-19T23:02:58,345ff32+,Apple M2,roadNet-CA,1965206,5533214,original,pr,gpu_pull_gs,tol=2.5e-07 cap=1000 tg=256 order=colored sets=9,,2,63.5102,56.5023,2.875066,33,1,2.43
+2026-10-19T23:03:52,345ff32+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_gs,tol=3.125e-08 cap=1000 tg=256 order=natural,,0,351.4290,341.2211,4.008314,46,1,2.26
+2026-10-19T23:03:52,345ff32+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_gs,tol=3.125e-08 cap=1000 tg=256 order=natural,,1,352.2246,341.5523,3.999260,46,1,2.26
+2026-10-19T23:03:52,345ff32+,Apple M2,soc-Pokec,1632803,30622564,original,pr,gpu_pull_gs,tol=3.125e-08 cap=1000 tg=256 order=natural,,2,352.7823,342.8536,3.992938,46,1,2.26
+2026-10-19T23:06:10,345ff32+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_gs,tol=1.25e-07 cap=1000 tg=256 order=natural,,0,859.0484,847.5234,4.144959,52,1,2.23
+2026-10-19T23:06:10,345ff32+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_gs,tol=1.25e-07 cap=1000 tg=256 order=natural,,1,901.4810,888.3938,3.949856,52,1,2.23
+2026-10-19T23:06:10,345ff32+,Apple M2,soc-LiveJournal1,4847571,68475391,original,pr,gpu_pull_gs,tol=1.25e-07 cap=1000 tg=256 order=natural,,2,914.8625,902.8895,3.966930,53,1,2.23
+2026-10-19T23:07:49,345ff32+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_gs,tol=1e-06 cap=1000 tg=256 order=natural,,0,1661.0036,1653.1748,4.515249,32,1,2.04
+2026-10-19T23:07:49,345ff32+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_gs,tol=1e-06 cap=1000 tg=256 order=natural,,1,1617.7268,1609.5079,4.636040,32,1,2.04
+2026-10-19T23:07:49,345ff32+,Apple M2,com-Orkut,3072441,234370166,original,pr,gpu_pull_gs,tol=1e-06 cap=1000 tg=256 order=natural,,2,1606.4306,1598.9995,4.668640,32,1,2.04

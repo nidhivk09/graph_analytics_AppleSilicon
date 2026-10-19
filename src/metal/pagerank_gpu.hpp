@@ -21,7 +21,8 @@
 
 namespace gpu {
 
-enum class PrVariant { Push, PullScalar, PullVector, PullAdaptive };
+// PullGS (Phase 12): in-place (Gauss-Seidel-style) pull; see prepareGS.
+enum class PrVariant { Push, PullScalar, PullVector, PullAdaptive, PullGS };
 
 struct GpuPrOptions {
     float damping = 0.85f;
@@ -30,6 +31,7 @@ struct GpuPrOptions {
     uint32_t tg = 256;       // threadgroup size of the main kernels (multiple of 32)
     uint32_t smallMax = 16;  // adaptive: in-degree < smallMax -> small bin
     uint32_t largeMin = 256; // adaptive: in-degree >= largeMin -> threadgroup per vertex
+    bool inPlace = false;    // any pull variant: update contrib in place (Phase 12 experiments)
 };
 
 struct GpuPrResult {
@@ -49,11 +51,40 @@ public:
     // once per threshold pair; run() calls it if needed).
     void prepareAdaptive(uint32_t smallMax, uint32_t largeMin);
 
+    // gpu_pull_gs update order (preprocessing, once). A GPU sweep updates
+    // tens of thousands of vertices at a time, so an in-place update only
+    // helps when a vertex's in-neighbors were updated in an EARLIER part of
+    // the sweep. Two orders, chosen per graph:
+    //  - colored: up to kGsColors rounds of Jones-Plassmann (a vertex joins
+    //    the round's set if its hash priority beats every uncolored
+    //    in-neighbor), one dispatch per set, leftovers last. Every edge then
+    //    crosses sets, so one endpoint always sees a fresh value. Used when
+    //    the sets cover >= 95% of vertices (low-degree graphs: roadNet-CA).
+    //    The sets are interleaved in vertex order, so dispatching them over
+    //    the original layout made every dispatch touch every cache line of
+    //    the CSR (roadNet: 4.2 vs 1.3 ms/iteration). Colored mode therefore
+    //    runs on a private relabeled copy of the in-CSR in which each set is
+    //    a contiguous id range (ids keep their order inside a set);
+    //    ranks() maps the result back to the caller's ids.
+    //  - natural: one in-place gpu_pull_vector dispatch in vertex order;
+    //    GPU waves run roughly in id order, so later waves see earlier ones.
+    // Natural order uses gpu_pull_vector because it is the fastest Jacobi
+    // kernel on the graphs that reach this branch (social/web); in-place
+    // degree-bin order (gpu_pull_adaptive --inplace) needs about the same
+    // number of sweeps (scripts/bench_gs.sh ablation).
+    // Limitation: vertices updated in the same wave still read each other's
+    // old values, so local structures such as a 2-cycle with adjacent ids
+    // converge only at the Jacobi rate while the rest of the graph is faster;
+    // the global L1-change stopping test then stops too early for them.
+    void prepareGS();
+    bool gsColored() const { return gsColored_; }
+    size_t gsSets() const { return gsBlocks_.size(); }
+
     GpuPrResult run(PrVariant v, const GpuPrOptions& opt);
-    const float* ranks() const { return static_cast<const float*>(r_[cur_].contents); }
+    const float* ranks() const;  // in the caller's vertex ids
 
 private:
-    struct Params { uint32_t n; float damping, base, invN; uint32_t size; };
+    struct Params { uint32_t n; float damping, base, invN; uint32_t size, inplace; };
     void encodeIteration(id<MTLComputeCommandEncoder> enc, PrVariant v, const GpuPrOptions& opt,
                          bool withDelta);
 
@@ -66,13 +97,23 @@ private:
     uint32_t binCount_[3] = {0, 0, 0};
     uint32_t binSmall_ = 0, binLarge_ = 0;  // thresholds the bins were built for
     bool binsReady_ = false;
+    bool gsReady_ = false, gsColored_ = false;
+    std::vector<id<MTLBuffer>> gsBlocks_;
+    std::vector<uint32_t> gsBlockSize_;
+    // Colored mode: relabeled in-CSR / out-degrees, newId[old], and the
+    // ranks mapped back to old ids (filled lazily by ranks(), untimed).
+    id<MTLBuffer> rowGS_, colGS_, outdegGS_;
+    std::vector<uint32_t> gsNewId_;
+    bool gsLastRun_ = false;
+    mutable std::vector<float> gsRanks_;
+    mutable bool gsRanksValid_ = false;
     int cur_ = 0;
     size_t reduceGroups_;
     id<MTLComputePipelineState> init_, contribK_, diff_, reduce_, push_, pushFin_, scalar_, vector_,
-        small_, medium_, large_;
+        small_, medium_, large_, sum_, scale_;
     std::unique_ptr<Primitives> prims_;
 };
 
-PrVariant parsePrVariant(const std::string& name);  // gpu_push, gpu_pull_scalar, ...
+PrVariant parsePrVariant(const std::string& name);  // gpu_push, gpu_pull_scalar, ..., gpu_pull_gs
 
 } // namespace gpu

@@ -97,6 +97,53 @@ def converge():
             md(["dataset", "cpu_omp", "GAP pr (8 thr)", "best GPU pull", "GPU speedup vs GAP"], rows))
 
 
+def gs():
+    """Phase 12: gpu_pull_gs at equal accuracy vs the best Jacobi pull kernel and GAP."""
+    if not optional("pr_gs_equal.csv"):
+        return "(run scripts/bench_gs.sh)"
+    fixed = pr_summary(pd.concat([csv("pr.csv"), csv("pr_gs.csv")]))
+    ms_it = {(r.dataset, r.variant): r.ms_it for r in fixed.itertuples()}
+    conv = csv("pr_converge.csv")
+    conv = conv[conv.variant.str.startswith("gpu_pull")]
+    jac = conv.groupby(["dataset", "variant"]).agg(ms=("time_ms_e2e", "median"), it=("iters", "median"))
+    eq = csv("pr_gs_equal.csv")
+    gap = optional("gap_pr_converge.csv")
+    gap = gap[0].groupby("dataset").time_ms_e2e.median() if gap else {}
+    rows = []
+    for d in DATASETS:
+        e = eq[eq.dataset == d]
+        if e.empty:
+            continue
+        j = jac.loc[d]
+        best = j.ms.idxmin()
+        tol = e.params.iloc[0].split()[0].split("=")[1]
+        order = [p for p in e.params.iloc[0].split() if p.startswith("order=")][0][6:]
+        gms, git = e.time_ms_e2e.median(), int(e.iters.median())
+        bj = min((ms_it[(d, v)] for v in PR_VARIANTS if v.startswith("gpu_pull") and (d, v) in ms_it))
+        rows.append([SHORT[d], order, f"{ms_it[(d, 'gpu_pull_gs')]:.3g} / {bj:.3g}",
+                     f"{fmt(j.loc[best, 'ms'])} ({int(j.loc[best, 'it'])})", tol,
+                     f"{fmt(gms)} ({git})", f"{j.loc[best, 'ms'] / gms:.2f}x",
+                     fmt(gap[d]) if d in gap else "–"])
+    return ("gpu_pull_gs vs the best Jacobi GPU pull kernel at EQUAL accuracy (Jacobi run to tol 1e-6;\n"
+            "GS run to the loosest tol at which its L1 and top-1000 errors vs the converged reference\n"
+            "are no larger):\n\n" +
+            md(["dataset", "GS order", "ms/sweep GS / best Jacobi", "best Jacobi to 1e-6, ms (it)",
+                "GS tol needed", "GS ms (sweeps)", "speedup", "GAP to 1e-6, ms"], rows))
+
+
+def gs_ablation():
+    a = optional("pr_gs_ablation.csv")
+    if not a:
+        return ""
+    a = a[0].groupby(["dataset", "variant"]).iters.median()
+    c = csv("pr_converge.csv").groupby(["dataset", "variant"]).iters.median()
+    rows = [[SHORT[d], int(c[(d, "gpu_pull_vector")]), int(a.get((d, "gpu_pull_vector"), -1)),
+             int(a.get((d, "gpu_pull_adaptive"), -1))] for d in DATASETS if (d, "gpu_pull_vector") in a]
+    return ("Sweeps to tol 1e-6 (same tol; GS stops less accurate, see above):\n\n" +
+            md(["dataset", "Jacobi", "in-place, natural order (vector)", "in-place, degree-bin order (adaptive)"],
+               rows))
+
+
 def reorder():
     loc = csv("reorder_locality.csv").set_index("key")
     pr = pr_summary(csv("reorder_pr.csv").assign(variant=lambda d: d.variant + "@" + d.ordering))
@@ -131,7 +178,7 @@ def efficiency():
             md(["dataset", "best BFS variant", "GTEPS", "MTEPS per GB/s"], rows))
 
 
-SECTIONS = {"datasets": datasets, "bfs": bfs, "star": star, "pagerank": pagerank, "converge": converge, "reorder": reorder,
+SECTIONS = {"datasets": datasets, "bfs": bfs, "star": star, "pagerank": pagerank, "converge": converge, "gs": gs, "gs_ablation": gs_ablation, "reorder": reorder,
             "efficiency": efficiency}
 
 if __name__ == "__main__":
