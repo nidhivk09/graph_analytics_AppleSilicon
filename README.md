@@ -1,11 +1,37 @@
 # graph-gpu: BFS and PageRank on Apple Silicon (Metal)
 
-High-performance breadth-first search and PageRank on an Apple M2 GPU using
-Metal compute shaders, compared against OpenMP CPU baselines, with careful
-benchmarking on SNAP graphs. See `PLAN.md` for the full design and
-`PROGRESS.md` for the running log.
+Breadth-first search and PageRank as Metal compute kernels on an 8 GB Apple M2,
+compared with OpenMP CPU baselines on six SNAP graphs (4K to 234M edges). Every
+GPU result is validated against a serial CPU reference: BFS must match exactly,
+and PageRank must have L1 error < 1e-4. The full write-up with all figures is
+**[docs/REPORT.md](docs/REPORT.md)**. `PLAN.md` holds the design and
+`PROGRESS.md` the phase-by-phase log.
 
-> Status: **Phase 2 (CPU BFS baselines)**. Results and figures will appear here as phases complete.
+## Headline results (M2, 10-core GPU, measured 95 GB/s)
+
+| | LiveJournal (69M edges) | Orkut (234M) | roadNet-CA (5.5M, 600+ levels) |
+|---|---|---|---|
+| BFS `cpu_serial` | 401 ms | 541 ms | 36.7 ms |
+| BFS `cpu_do`, 8 threads | 20.7 ms | 25.1 ms | 38.0 ms |
+| BFS `gpu_do` (direction-optimizing, GPU only) | 10.7 ms | 13.3 ms | 113 ms |
+| BFS `hybrid` (small levels on CPU, shared buffers) | **8.8 ms (4.6 GTEPS)** | **13.1 ms (8.0 GTEPS)** | **22.0 ms** |
+| PageRank `cpu_omp`, ms/iteration | 42.5 | 138 | 3.11 |
+| PageRank best GPU pull, ms/iteration | **14.0** | **49.0** | **0.80** |
+
+- **Direction optimization is the big win on social graphs.** `gpu_do` is 3–5×
+  faster than load-balanced top-down GPU BFS. The hybrid is 1.7–2.4× faster than
+  the best 8-thread CPU BFS and 41–46× faster than serial.
+- **High-diameter graphs are bound by per-level sync, not bandwidth.** Each GPU
+  level costs ~0.2 ms however small it is. On roadNet-CA the hybrid runs those
+  levels on the CPU at zero copy cost and beats GPU-only BFS by 5.1×.
+- **PageRank: pull beats atomic push by 1.5–4.9×.** Simdgroup-per-vertex wins on
+  skewed graphs; thread-per-vertex wins by 2.8× on the road network; a
+  degree-adaptive kernel is within 10% of the best everywhere.
+- **Orderings:** random labels cost 2–3× in PageRank. Reverse Cuthill–McKee helps
+  PageRank (up to 2.3× on web-Google) but slows bottom-up BFS on social graphs,
+  because it delays early exits.
+
+![BFS GTEPS](figures/fig04_bfs_gteps.png)
 
 ## Requirements
 
@@ -32,7 +58,8 @@ set `GGPU_SHADER_DIR` to that directory.
 ## Benchmarking and validation
 
 ```sh
-# BFS: 64 fixed random sources (largest component), 2 warm-up + 5 timed runs each,
+# BFS: 64 fixed random sources (largest component); 2 warm-up runs, then per source
+# 1 warm-up + 5 timed runs;
 # exact check against cpu_serial, rows appended to a CSV
 ./build/gbench --graph data/soc-LiveJournal1.bin --algo bfs --variant cpu_do \
                --threads 8 --validate --csv results/bfs.csv [--trace trace.csv]
@@ -53,7 +80,7 @@ set `GGPU_SHADER_DIR` to that directory.
 ./scripts/scaling_cpu.sh                       # OpenMP schedule x thread-count sweep
 ```
 
-BFS variants so far: `cpu_serial` (reference), `cpu_omp` (level-synchronous,
+BFS variants: `cpu_serial` (reference), `cpu_omp` (level-synchronous,
 `--schedule static|dynamic,64|guided`), `cpu_do` (direction-optimizing,
 `--alpha 15 --beta 18`), `gpu_vertex` (thread per vertex every level) and
 `gpu_naive` (thread per frontier vertex, CAS claim, atomic queue append),
@@ -78,6 +105,21 @@ binned by in-degree; `--small-max 16 --large-min 256`).
 ./scripts/sweep_balanced.sh     # gpu_binned thresholds / gpu_edge ept x threadgroup size
 ./scripts/sweep_do.sh           # gpu_do alpha x beta
 ./scripts/sweep_hybrid.sh       # hybrid threshold T (0 .. inf) x CPU threads
+```
+
+## Reproducing everything
+
+```sh
+./scripts/download.sh                    # all six SNAP datasets (~1.3 GB of .bin in data/)
+./scripts/setup_python.sh                # .venv for analysis and NetworkX validation
+make && make test                        # zero-warning build + 24 test groups
+./scripts/run_all.sh                     # full validated matrix -> results/*.csv, then figures/
+                                         # (~75 min on an M2; refuses to run on battery or
+                                         #  Low Power Mode unless FORCE=1; logs in logs/)
+./scripts/run_all.sh pr reorder plots    # or just some stages
+./scripts/run_all.sh tuning_balanced tuning_do tuning_tg   # the parameter sweeps (not rerun by default)
+.venv/bin/python analysis/plots.py       # regenerate the 11 figures (PNG + SVG) from results/
+.venv/bin/python analysis/report_tables.py   # markdown tables used in docs/REPORT.md
 ```
 
 ## Layout

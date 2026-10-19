@@ -4,8 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 9 complete** (2026-10-19). Waiting for approval to start Phase 10.
-- Next: Phase 10 (full benchmark run on AC with other apps closed, figures, report).
+- **Phase 10 complete** (2026-10-19). All PLAN phases 0–10 are done; Phase 11 (GAP external baseline) is optional and not started.
+- Final results: `docs/REPORT.md` (11 figures in `figures/`, all from one `scripts/run_all.sh` run on AC power).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
   dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
@@ -710,3 +710,33 @@ PageRank `gpu_pull_adaptive`:
 **Open issues / notes**
 - Hub-first ordering *within* adjacency lists (keeping vertex labels) could combine RCM's PageRank locality with fast bottom-up exits. Not done; outside the PLAN.
 - Swap was ~6 GB used with other apps open; Phase 10 should run with apps closed.
+
+### 2026-10-19 · Phase 10: full benchmark run, figures, report
+
+**Built**
+- `scripts/sweep_tg.sh`: threadgroup sizes 64–1024 for `gpu_do` (LiveJournal, Pokec, Orkut) and `gpu_pull_vector`/`gpu_pull_adaptive` (four graphs) → `results/sweep_tg.csv`.
+- `scripts/run_all.sh`: the full validated matrix in stages (test, micro, stats, bfs_cpu, scaling, bfs_gpu, star, hybrid_sweep, pr, reorder, networkx, plots; tuning sweeps only when named). It prints an estimate, refuses to run on battery or Low Power Mode unless `FORCE=1`, and logs to `logs/` (gitignored). The GPU BFS variants now share `results/bfs_gpu.csv` and `results/trace_bfs.csv`; the per-phase `bfs_gpu_do.csv`, `bfs_hybrid.csv` and `trace_bfs_*` files were retired (still in git history).
+- `analysis/plots.py`: figures 1–11 as PNG + SVG. `analysis/report_tables.py` generates the markdown tables in the report.
+- `docs/REPORT.md` and the final `README.md`.
+
+**Threadgroup sweep → defaults unchanged (256).** All differences are ≤ 5% for PageRank and ≤ 10% for `gpu_do`, with no consistent winner (e.g. Orkut `gpu_do`: 17.8 / 17.3 / 17.2 / 16.7 / 18.5 ms for tg 64…1024). The kernels are latency-bound, not occupancy-bound.
+
+**Intermittent `gpu_push` failure (fixed in 7a74ade).** The first `run_all` aborted in the test stage. `gpu_push` in tol mode on star100k gave L1 1.02e-4 against the 1e-4 limit, in 1 of 15 stress runs. The simdgroup-aggregated atomics from Phase 8 remove most systematic rounding, but rounds where lanes target different vertices still add one at a time into the hub's accumulator, and the error depends on atomic order. **Fix:** compensated atomics. After each `atomic_fetch_add`, the rounding error of that add is computed exactly (TwoSum on the returned old value) and, if it is larger than 2^-16 of the term, added to a second accumulator `acc_lo`; finalize uses `acc + acc_lo`. Compensating every add cost 2.2×; the threshold makes it 0–12%. Star L1 is now 4e-7, 0/15 failures under stress, 4/4 clean full-suite repeats. No tolerance was changed.
+
+**Full run** (`logs/run_all_20261019_173954.log`; AC power, Low Power Mode off, other apps closed; all stages passed, 73 min; `make test` 24/24; NetworkX 45/45; peak RSS 2.7 GB). Every number in the report comes from this run. The Phase 6 and 8 tables, which were measured on battery, are superseded. Main changes vs the earlier runs:
+- `cpu_do` on AC: LiveJournal 20.7 ms, Orkut 25.1 (Phase 2: 22.4 / 28.0). `gpu_do` 10.7 / 13.3; hybrid 8.76 / 13.1; Pokec hybrid 4.76.
+- PageRank on AC: `cpu_omp` LiveJournal 42.5 ms/iteration (battery 47.3). `gpu_pull_vector` is now the best variant on Pokec and Orkut too (6.84, 49.0), with adaptive within 10%.
+- **Orkut vector anomaly (Phase 8) resolved:** fixed mode 49.0 vs tol mode 49.9 ms/iteration on AC. It was a battery effect.
+- web-Google `hybrid` 6.42 ms is now slightly ahead of `cpu_do` (6.95).
+
+**Report findings worth remembering**
+- The hypothesis "small graphs have higher GTEPS (cache)" is **wrong for BFS**. GTEPS grows with size, because small graphs are bound by per-level fixed costs (fig 10).
+- roadNet-CA: `hybrid` (22.0 ms) is effectively a 4-thread CPU BFS. It matches `cpu_omp` at 4 threads (20.1 ms). Eight threads are slower (35–39 ms) for every schedule because of E-core barriers (fig 7).
+- Static scheduling is 24% slower than dynamic on LiveJournal at 8 threads (18% already at 2 threads).
+- Best BFS efficiency: 84 MTEPS per GB/s (Orkut, hybrid); PageRank reaches up to 78% of the measured 95 GB/s (roadNet-CA scalar).
+
+**Figure fix:** fig 10 originally joined points in dataset order, making zig-zag lines, and its labels fell outside the axes. Points are now sorted by size, labels are inside the axes, and the legend is outside the plot.
+
+**Open issues / notes**
+- ego-Facebook PageRank at ~0.02–0.06 ms/iteration varies up to 2× between runs (`pr.csv` vs `reorder_pr.csv`). These numbers are noted as noise in the report's limitations; no conclusions are drawn from them.
+- Not done (future work in the report): indirect dispatch to cut per-level syncs, hub-first neighbor order within lists, P-core-only OpenMP, Phase 11 GAP baseline.

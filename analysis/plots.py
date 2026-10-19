@@ -312,25 +312,27 @@ def fig10_size():
     stats = csv("dataset_stats.csv").set_index("dataset")
     b = bfs_summary(pd.concat([csv("bfs_cpu.csv"), csv("bfs_gpu.csv")]))
     p = pr_summary(csv("pr.csv"))
-    fig, ax = plt.subplots(figsize=(7, 4.2))
+    fig, ax = plt.subplots(figsize=(9.5, 4.2))
     mb = {d: (4 * (stats.loc[d, "n"] + 1) + 4 * 2 * stats.loc[d, "undirected_edges"]) / 2**20 for d in DATASETS}
+    order = sorted(DATASETS, key=lambda d: mb[d])  # connect points left to right
     for v, mk, c in (("hybrid", "o", "C2"), ("gpu_do", "s", "C3"), ("cpu_do", "^", "C1")):
         g = b[b.variant == v].set_index("dataset")
-        ax.plot([mb[d] for d in DATASETS], [g.loc[d, "gteps"] for d in DATASETS], mk + "-", color=c,
+        ax.plot([mb[d] for d in order], [g.loc[d, "gteps"] for d in order], mk + "-", color=c,
                 label=f"BFS {v} (GTEPS)")
     g = p[p.variant == "gpu_pull_adaptive"].set_index("dataset")
-    ax.plot([mb[d] for d in DATASETS], [g.loc[d, "m"] / (g.loc[d, "ms_it"] * 1e6) for d in DATASETS], "D--",
+    ax.plot([mb[d] for d in order], [g.loc[d, "m"] / (g.loc[d, "ms_it"] * 1e6) for d in order], "D--",
             color="C4", label="PageRank gpu_pull_adaptive (G edges/s per iteration)")
-    for d in DATASETS:
-        ax.annotate(SHORT[d], (mb[d], 0.012), fontsize=6, rotation=90, ha="center")
+    ax.set_ylim(0.004, 20)
+    for i, d in enumerate(order):  # roadNet and web-Google are close in size: stagger their labels
+        ax.annotate(SHORT[d], (mb[d], 0.0055 if i % 2 == 0 else 0.009), fontsize=7, ha="center")
     ax.axvline(8, color="gray", ls=":", lw=0.8)
-    ax.text(8.5, 0.02, "8 MB SLC", fontsize=7, color="gray")
+    ax.text(8.5, 2, "8 MB SLC", fontsize=7, color="gray")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("symmetric CSR size (MB)")
     ax.set_ylabel("G edges / s")
     ax.set_title("Throughput vs graph size")
-    ax.legend(fontsize=7)
+    ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.01, 1))
     save(fig, "fig10_throughput_vs_size")
 
 
