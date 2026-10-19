@@ -4,7 +4,7 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 4 complete** (2026-10-15). Correctness is final, but the **timings are provisional**: they were measured on battery with Low Power Mode on. Rerun `scripts/bench_bfs.sh` on AC with Low Power Mode off, then replace the Phase 4 table, before using these numbers in comparisons.
+- **Phase 4 complete** (2026-10-15; timings rerun on AC power 2026-10-19). Waiting for approval to start Phase 5.
 - Next: Phase 5 (`gpu_binned`, `gpu_edge` load-balanced BFS).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
@@ -269,27 +269,30 @@ Serial: roadNet-CA 37.9 ms, LiveJournal 424.7 ms.
 
 **Validation:** both variants match `cpu_serial` exactly on all six datasets × 64 sources × every trial (`--validate`). Peak RSS for the whole run is 1.94 GB (Orkut).
 
-**First GPU numbers: PROVISIONAL (battery, Low Power Mode on)** (`results/bfs_gpu.csv`; 64 sources × 5 trials; median ms end-to-end / kernel-only; GTEPS = harmonic mean)
+**First GPU numbers** (`results/bfs_gpu.csv`; rerun 2026-10-19 on AC, Low Power Mode off; 64 sources × 5 trials, validated; median ms end-to-end / kernel-only; GTEPS = harmonic mean). Before the run, two reference points matched the earlier AC measurements: `cpu_do` LiveJournal 23.3 ms (Phase 2: 22.4) and launch round trip 104 µs (Phase 3: 111). Peak RSS 1.45 GB.
 
-| dataset | gpu_vertex e2e / GPU | GTEPS | gpu_naive e2e / GPU | GTEPS | best CPU (Phase 2, AC) |
+| dataset | gpu_vertex e2e / GPU | GTEPS | gpu_naive e2e / GPU | GTEPS | CPU (Phase 2): omp / do / serial |
 |---|---|---|---|---|---|
-| ego-Facebook | 2.8 / 1.4 | 0.03 | 4.8 / 3.2 | 0.02 | serial 0.10 ms |
-| web-Google | 13.7 / 10.7 | 0.29 | 18.2 / 14.9 | 0.23 | do 6.9 ms |
-| roadNet-CA | 346 / 195 | 0.008 | 135 / 16.6 | 0.020 | serial 37.5 ms |
-| soc-Pokec | 19.6 / 17.1 | 1.09 | 29.6 / 27.2 | 0.73 | do 8.8 ms |
-| soc-LiveJournal1 | 47.5 / 42.2 | 0.74 | 68.0 / 65.0 | 0.61 | do 22.4 ms (omp 139) |
-| com-Orkut | 164 / 136 | 0.71 | 185 / 180 | 0.64 | do 28.0 ms (omp 222) |
+| ego-Facebook | 2.6 / 1.4 | 0.035 | 4.4 / 3.2 | 0.021 | – / – / 0.10 |
+| web-Google | 14.0 / 11.0 | 0.30 | 17.2 / 14.4 | 0.25 | 15.2 / 6.9 / 32.6 |
+| roadNet-CA | 320 / 190 | 0.0085 | 115 / 19.6 | 0.024 | 39.3 / 41.3 / 37.5 |
+| soc-Pokec | 17.8 / 15.9 | 1.25 | 29.8 / 27.4 | 0.75 | 54.7 / 8.8 / 162 |
+| soc-LiveJournal1 | 36.2 / 33.3 | 1.16 | 61.9 / 59.3 | 0.68 | 139 / 22.4 / 425 |
+| com-Orkut | 75.6 / 73.7 | 1.53 | 119 / 117 | 0.99 | 222 / 28.0 / 555 |
 
-How unreliable are these? Measured right after the run on the same battery/LPM state: `cpu_do` LiveJournal took 28.4 ms (vs 22.4 on AC, +27%), the launch round trip 127 µs (vs 111, +14%), and the one-encoder dependent dispatch 1.7 µs (vs 0.6). GPU streaming bandwidth was unchanged (97 GB/s). The run was also noisy: Orkut `gpu_vertex` gave 102 ms median in the first full run and 164 ms in the second (min 71 ms both times). **Rerun on AC before drawing quantitative conclusions.** The qualitative picture below shows up in both runs and in the traces.
+- vs `cpu_omp` (same top-down algorithm, 8 threads): `gpu_vertex` is **3.8× faster on LiveJournal, 2.9× on Orkut, 3.1× on Pokec**.
+- vs `cpu_do`: `gpu_vertex` is still **1.6× slower on LiveJournal, 2.7× on Orkut, 2.0× on Pokec**.
+- roadNet-CA: the best GPU variant (115 ms) is **3.1× slower than serial CPU** (37.5 ms).
+- The earlier battery/Low Power Mode runs (Orkut `gpu_vertex` 102–164 ms vs 75.6 now) are superseded. They remain only in git history (`445fb3e`).
 
-**Observations (qualitative; hold under both runs)**
+**Observations**
 - **Both simple GPU variants beat `cpu_omp` on the social graphs** (LiveJournal ~1.5–3×), but **lose clearly to `cpu_do`**. Top-down BFS does ~m edge checks regardless of device; direction optimization skips most of them. `gpu_do` (Phase 6) is the fair comparison.
-- **roadNet-CA is the sync-bound case, as Phase 3 predicted.** `gpu_naive` runs 608 levels; the GPU works for only 16.6 ms, but end to end takes 135 ms, i.e. ~0.19 ms per level, of which ~0.03 ms is kernel. That is the ~111–127 µs round trip plus per-level command-buffer setup. `gpu_vertex` is worse still (195 ms of kernel time), because it launches all 2M vertex threads on every one of the 608 levels just to find the few frontier vertices.
-- **`gpu_naive` is slower than `gpu_vertex` on every social graph.** The LiveJournal trace shows where: the big levels 3–5 (2.3M–39M edges) take 13 / 18 / 27 ms with `gpu_naive` vs 5.7 / 12 / 9.7 ms with `gpu_vertex`. There are two causes:
+- **roadNet-CA is the sync-bound case, as Phase 3 predicted.** `gpu_naive` runs ~608 levels; the GPU works for only 19.6 ms, but end to end takes 115 ms, i.e. ~0.19 ms per level, of which ~0.03 ms is kernel. The rest is the ~104–111 µs round trip plus per-level command-buffer setup. `gpu_vertex` is worse still (190 ms of kernel time), because it launches all 2M vertex threads on every one of the 608 levels just to find the few frontier vertices.
+- **`gpu_naive` is slower than `gpu_vertex` on every social graph.** The LiveJournal trace shows where: the big levels 3–5 (2.3M–39M edges) take 16.6 / 20.7 / 26.8 ms with `gpu_naive` vs 8.2 / 13.3 / 11.6 ms with `gpu_vertex`. There are two causes:
   - Load imbalance: one thread walks a whole hub adjacency list (max degree ~20K) while its simdgroup waits.
   - One global atomic per discovered vertex on a single queue-tail counter (2.4M at level 5).
 
-  `gpu_vertex` avoids both: its threads are mostly idle filters, and it has no queue. On tiny frontiers (late levels), `gpu_naive` wins (0.15–0.2 vs 0.43 ms per level), because it launches only `size` threads. Phase 5 (`gpu_binned` / `gpu_edge`) targets the imbalance and contention.
+  `gpu_vertex` avoids both: its threads are mostly idle filters, and it has no queue. On tiny frontiers (late levels), `gpu_naive` wins (median roadNet-CA level 0.16 vs 0.47 ms), because it launches only `size` threads. Phase 5 (`gpu_binned` / `gpu_edge`) targets the imbalance and contention.
 - **GPU clock wake-up:** in traces, level 0 of the first source took 16–24 ms (vs ~0.4 ms for the other sources) after the GPU sat idle during the CPU reference computation.
 
 **Decisions**
@@ -299,5 +302,4 @@ How unreliable are these? Measured right after the run on the same battery/LPM s
 - `gpu_vertex` uses plain loads/stores on dist (a benign race). `STAT_FOUND` can overcount there, so it serves only as the "anything discovered?" flag. Exact frontier sizes come from the next level's frontier count.
 
 **Open issues / notes**
-- **Rerun `scripts/bench_bfs.sh results/bfs_gpu.csv gpu_vertex gpu_naive` on AC power with Low Power Mode off** (~15 min) and replace the provisional table.
-- Swap was still ~4.6 GB used, with other apps open.
+- Swap was ~6.8 GB used during the AC rerun (other apps open). Timings were stable (median within ~5–15% of min on social graphs), but close apps before Phase 10.
