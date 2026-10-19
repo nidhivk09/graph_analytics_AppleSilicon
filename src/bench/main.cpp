@@ -3,6 +3,8 @@
 //   gbench --graph data/soc-LiveJournal1.bin --algo bfs --variant cpu_omp
 //          [--threads 8] [--schedule static|dynamic,64|guided] [--alpha 15 --beta 18]
 //          [--tg 256]                                (GPU variants: threadgroup size)
+//          [--small-max 16 --large-min 256]         (gpu_binned degree thresholds)
+//          [--ept 2]                                 (gpu_edge: edges per thread)
 //          [--sources 64 | --source S] [--seed 1] [--any-component] [--warmup 2] [--trials 5]
 //          [--source-warmup 1]
 //          [--validate] [--trace trace.csv] [--csv results/bfs.csv] [--ordering original]
@@ -57,8 +59,8 @@ namespace {
 using BfsFn = std::function<void(const CSR&, uint32_t, uint32_t*, const cpu::BfsOptions&,
                                  std::vector<util::BfsLevel>*)>;
 
-const std::vector<std::string> kVariants = {"cpu_serial", "cpu_omp", "cpu_do", "gpu_vertex",
-                                            "gpu_naive"};
+const std::vector<std::string> kVariants = {"cpu_serial", "cpu_omp",   "cpu_do",  "gpu_vertex",
+                                            "gpu_naive",  "gpu_binned", "gpu_edge"};
 
 bool isGpuVariant(const std::string& v) { return v.rfind("gpu_", 0) == 0; }
 
@@ -76,6 +78,12 @@ BfsFn bfsVariant(const std::string& variant, gpu::GpuBfs* gbfs, const gpu::GpuBf
     if (variant == "gpu_naive")
         return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
                             std::vector<util::BfsLevel>* tr) { gbfs->runNaive(s, d, gopt, tr); };
+    if (variant == "gpu_binned")
+        return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
+                            std::vector<util::BfsLevel>* tr) { gbfs->runBinned(s, d, gopt, tr); };
+    if (variant == "gpu_edge")
+        return [gbfs, gopt](const CSR&, uint32_t s, uint32_t* d, const cpu::BfsOptions&,
+                            std::vector<util::BfsLevel>* tr) { gbfs->runEdge(s, d, gopt, tr); };
     return nullptr;
 }
 
@@ -160,6 +168,9 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
     opt.beta = args.getDouble("beta", 18.0);
     gpu::GpuBfsOptions gopt;
     gopt.tg = (uint32_t)args.getInt("tg", 256);
+    gopt.smallMax = (uint32_t)args.getInt("small-max", 16);
+    gopt.largeMin = (uint32_t)args.getInt("large-min", 256);
+    gopt.ept = (uint32_t)args.getInt("ept", 2);
 
     // Transform cost (and the GPU upload) is outside every timed region (PLAN 4.4).
     util::Timer prep;
@@ -199,6 +210,9 @@ int runBfs(const util::Args& args, const CSR& stored, const std::string& dataset
         params += b;
     }
     if (gpuVariant) params = "tg=" + std::to_string(gopt.tg);
+    if (variant == "gpu_binned")
+        params += " small_max=" + std::to_string(gopt.smallMax) + " large_min=" + std::to_string(gopt.largeMin);
+    if (variant == "gpu_edge") params += " ept=" + std::to_string(gopt.ept);
 
     std::printf("%s: n %llu, symmetrized m %llu (%llu undirected edges), prep %.0f ms\n", dataset.c_str(),
                 (unsigned long long)g.n, (unsigned long long)g.m, (unsigned long long)(g.m / 2), prepMs);

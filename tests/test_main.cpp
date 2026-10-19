@@ -454,7 +454,8 @@ TEST(primitives_queue_bitmap_roundtrip) {
     }
 }
 
-// Every GPU BFS variant, every synthetic graph, several sources (including
+// Every GPU BFS variant (and gpu_binned / gpu_edge parameter extremes),
+// every synthetic graph, several sources (including
 // isolated vertices), plus the vertex with the highest degree (star hub):
 // dist must equal cpu_serial exactly, and the trace must account for every
 // reached vertex exactly once.
@@ -468,17 +469,30 @@ TEST(gpu_bfs_matches_serial_on_synthetic_graphs) {
         sources.push_back(hub);
         for (uint32_t src : sources) {
             auto ref = cpu::bfsSerial(g, src);
-            for (int variant = 0; variant < 2; ++variant)
+            // gpu_binned threshold sets: default, everything small, everything
+            // large, everything medium-or-large, tiny bins. gpu_edge: several
+            // edges-per-thread values (1 = one edge per thread, 16 = long chunks).
+            struct Cfg { const char* name; int variant; uint32_t smallMax, largeMin, ept; };
+            const Cfg cfgs[] = {
+                {"gpu_vertex", 0, 0, 0, 0},           {"gpu_naive", 1, 0, 0, 0},
+                {"gpu_binned", 2, 32, 1024, 0},       {"gpu_binned/all-small", 2, 1u << 30, 1u << 31, 0},
+                {"gpu_binned/all-large", 2, 0, 0, 0}, {"gpu_binned/medium", 2, 1, 1u << 30, 0},
+                {"gpu_binned/2-3", 2, 2, 3, 0},       {"gpu_edge/1", 3, 0, 0, 1},
+                {"gpu_edge/4", 3, 0, 0, 4},           {"gpu_edge/16", 3, 0, 0, 16},
+            };
+            for (const Cfg& c : cfgs)
                 for (uint32_t tg : {32u, 256u, 1024u}) {
                     gpu::GpuBfsOptions o;
                     o.tg = tg;
+                    if (c.variant == 2) { o.smallMax = c.smallMax; o.largeMin = c.largeMin; }
+                    if (c.variant == 3) o.ept = c.ept;
                     std::vector<util::BfsLevel> tr;
                     std::vector<uint32_t> d(g.n, 12345);
-                    if (variant == 0) bfs.runVertex(src, d.data(), o, &tr);
-                    else bfs.runNaive(src, d.data(), o, &tr);
-                    if (d != ref)
-                        std::printf("    %s src %u %s tg %u\n", name.c_str(), src,
-                                    variant ? "gpu_naive" : "gpu_vertex", tg);
+                    if (c.variant == 0) bfs.runVertex(src, d.data(), o, &tr);
+                    else if (c.variant == 1) bfs.runNaive(src, d.data(), o, &tr);
+                    else if (c.variant == 2) bfs.runBinned(src, d.data(), o, &tr);
+                    else bfs.runEdge(src, d.data(), o, &tr);
+                    if (d != ref) std::printf("    %s src %u %s tg %u\n", name.c_str(), src, c.name, tg);
                     CHECK(d == ref);
                     uint64_t sum = 0, edges = 0, want = 0;
                     for (auto& L : tr) { sum += L.frontier; edges += L.edges; }

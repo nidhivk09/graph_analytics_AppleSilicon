@@ -4,8 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 4 complete** (2026-10-15; timings rerun on AC power 2026-10-19). Waiting for approval to start Phase 5.
-- Next: Phase 5 (`gpu_binned`, `gpu_edge` load-balanced BFS).
+- **Phase 5 complete** (2026-10-19). Waiting for approval to start Phase 6.
+- Next: Phase 6 (`gpu_do`: direction-optimizing GPU BFS with bitmap bottom-up).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
   dependent dispatch in one encoder **~0.6 µs** (GPU) / 0.8 µs (wall); random 4 B gather on DRAM-sized
@@ -303,3 +303,80 @@ Serial: roadNet-CA 37.9 ms, LiveJournal 424.7 ms.
 
 **Open issues / notes**
 - Swap was ~6.8 GB used during the AC rerun (other apps open). Timings were stable (median within ~5–15% of min on social graphs), but close apps before Phase 10.
+
+### 2026-10-19 · Phase 5: load-balanced GPU BFS
+
+**Built**
+- **`gpu_binned`** (`bfs_binned_small/medium/large`): three degree bins, three dispatches per level.
+  - small (< `--small-max`): simdgroup-cooperative gather (see below)
+  - medium: simdgroup per vertex, lanes stride the list
+  - large (≥ `--large-min`): threadgroup per vertex
+- **`gpu_edge`** (`bfs_edge_expand`): exclusive scan of frontier degrees (the Phase 4 scan primitive), then a fixed `--ept` edges per thread.
+  - Threadgroup *t* owns a contiguous chunk of tg × ept edges; thread *j* takes edges *j*, *j*+tg, ..., so col_idx reads are coalesced.
+  - Thread 0 binary-searches the chunk's first and last owner once; each edge then searches only that range (usually 1–2 vertices on hub chunks).
+- **Still one host sync per level** (Phase 3: ~111 µs each). All per-vertex bookkeeping happens at discovery time in the previous level, and the host learns everything it needs from the same sync:
+  - `gpu_binned` appends a discovered vertex directly to the next queue of its degree bin, so the host reads three bin counts.
+  - `gpu_edge` stores each discovered vertex's degree next to its queue slot (scanned in place next level), and the level's total edge count accumulates in `stats[3]`.
+  - The rejected alternative, a classification pass, needs a second sync per level to size its dispatches.
+- **Aggregated queue appends:** one atomic per simdgroup per round (prefix sum + broadcast) instead of one per discovered vertex. This requires simdgroup-uniform loop trip counts, so all append loops run uniform rounds with a per-lane `has` flag. A `simd_any(claimed)` guard skips the append work for rounds that discover nothing. That guard is cheap and correct, but it made no measurable difference; see the bottleneck analysis.
+- `scripts/sweep_balanced.sh` → `results/sweep_bfs_balanced.csv`. `results/bfs_star.csv` holds every variant on `synth:star100k`.
+- **Tests: still 18, now covering 10 GPU configurations** per graph × source × tg ∈ {32, 256, 1024}:
+  - `gpu_binned` with default, all-small, all-large, all-medium and 2/3 thresholds
+  - `gpu_edge` with ept 1/4/16
+- **Mutation checks (each caught by the tests):**
+  - owner binary search `<=` → `<`
+  - aggregated append slot off by one
+  - small-bin loop made divergent (per-lane trip count instead of simdgroup max). This confirms the uniform-rounds requirement is real.
+  - cooperative owner search `<=` → `<`
+
+**Small-bin redesign (measured).** The first small kernel had each lane walk its own list for max-degree-in-simdgroup rounds. On LiveJournal, putting every vertex into the small bin took 86.7 ms vs 42.3 ms for all-medium, and the default thresholds gave 61.6 ms, *slower than `gpu_vertex`*. Reads were uncoalesced, and short-list lanes idled.
+
+The replacement is Merrill's warp-cooperative gather. The 32 short lists are concatenated via `simd_prefix_exclusive_sum` of degrees; each round, lane *j* takes edge *j* and finds its owner with a 5-step `simd_shuffle` binary search. All-small dropped to 48.8 ms and the default to 47.5 ms. The bin's contract is unchanged (one thread owns each small vertex); only the edge expansion is shared.
+
+Two other hypotheses tested and **rejected** (no measurable change on LiveJournal):
+- plain instead of atomic loads for the "already visited?" filter before the CAS
+- skipping append work when nothing was claimed
+
+**Tuning** (`results/sweep_bfs_balanced.csv`; 16 sources × 3 trials, median e2e ms)
+- **`gpu_binned`:** 12 threshold pairs vary within ~10% on LiveJournal (46.0–54.8) and Orkut (66.2–71.6). That's near the ~5% run-to-run noise, because the cooperative small bin removed most of the sensitivity. Threadgroup size 64–1024 also varies within noise. Defaults: **small < 16, large ≥ 256, tg 256** (LiveJournal 47.5, Orkut 66.2, best on Orkut).
+- **`gpu_edge`:** **ept 2** is best on both graphs at every tg (LiveJournal 38.6–39.9, Orkut 64.6–65.4, except tg 1024 on Orkut). ept 1 pays the owner search and append overhead on every edge (Orkut 74–85). ept ≥ 8 cuts parallelism on mid-size levels (Orkut 76–94). Default: **ept 2, tg 256**.
+
+**Results** (`results/bfs_gpu.csv`; all four variants in one session on AC power, Low Power Mode off; 64 sources × 5 trials, all validated; median ms end-to-end, GPU-only in parentheses; peak RSS 1.94 GB)
+
+| dataset | gpu_vertex | gpu_naive | gpu_binned | gpu_edge | best CPU (Phase 2) |
+|---|---|---|---|---|---|
+| ego-Facebook | 2.7 (1.4) | 4.4 (3.2) | 1.6 (0.39) | **1.2** (0.21) | serial 0.10 |
+| web-Google | 16.7 (11.8) | 17.3 (14.4) | **10.9** (7.5) | **10.9** (6.9) | do 6.9 |
+| roadNet-CA | 368 (233) | **115** (29) | 119 (35) | 115 (27) | serial 37.5 |
+| soc-Pokec | 18.6 (16.6) | 30.1 (27.9) | 18.5 (16.7) | **18.0** (16.0) | do 8.8 |
+| soc-LiveJournal1 | **36.8** (34.1) | 66.8 (63.5) | 44.3 (41.1) | 42.9 (40.0) | do 22.4 |
+| com-Orkut | 81.5 (79.7) | 131.9 (129.3) | **68.6** (66.8) | 77.5 (75.5) | do 28.0 |
+
+**Star graph** (`synth:star100k`, 64 leaf sources; `results/bfs_star.csv`): `gpu_naive` takes **41.4 ms**, `gpu_vertex` 15.2, `gpu_binned` 1.05, **`gpu_edge` 0.67 ms, 62× faster than naive**. The single hub's 100K-edge list is walked by one thread in `gpu_naive`, by one threadgroup (one core) in `gpu_binned`, and by the whole GPU in `gpu_edge`. The CPU wins anyway (serial 0.16 ms): the graph is tiny, and each GPU level costs a round trip.
+
+**Interpretation**
+- **Load balancing fixes `gpu_naive`:** 1.5–1.9× faster on the social graphs (Orkut 132 → 69 ms, LiveJournal 67 → 43, Pokec 30 → 18) and 40–60× on the star.
+- **But balanced variants barely beat the simple `gpu_vertex`, and lose to it on LiveJournal.** Top-down BFS on these graphs is **bound by random `dist` gathers, not by imbalance**. LiveJournal examines ~85M adjacency entries per BFS, each a 4-byte random read of a 19 MB `dist` array. 85M / ~34–41 ms ≈ 2.1–2.5 G reads/s. That is at, or a bit above, the Phase 3 random-gather rate for a table that size (1.1–1.9 G/s at 16–32 MB; real graphs have some locality). Balancing changes who does the gathers, not how many there are. Only skipping edges (direction optimization, Phase 6) or improving locality (reordering, Phase 9) attacks that.
+- **The per-level trace shows both effects** (LiveJournal, ms per level):
+
+  | level | edges | gpu_naive | gpu_vertex | gpu_binned | gpu_edge |
+  |---|---|---|---|---|---|
+  | 3 | 2.3M | 16.7 | 8.6 | 2.6 | 2.2 |
+  | 4 | 34M | 25.3 | 24.5 | 24.9 | 26.1 |
+  | 5 | 39M | 29.3 | 13.0 | 23.4 | 21.7 |
+  | 6 | 8.7M | 8.1 | 2.5 | 7.6 | 6.9 |
+
+  - **Level 3** (23K frontier vertices with hubs): load balancing gives a 4–8× speedup.
+  - **Levels 4–5:** everything converges to the gather limit.
+  - **Open question:** `gpu_vertex` is ~2× faster on levels 5–6, where the frontier is half the graph and most neighbors are already visited. My hypothesis is access order: `gpu_vertex` walks frontier vertices in vertex-ID order, so its `col_idx` reads stream sequentially and its `dist` reads keep the input ordering's locality, while queue variants process vertices in atomic-append order (effectively random). Not verified. Phase 6's bitmap bottom-up processes vertices in ID order and will show whether the effect holds; Phase 9 measures ordering effects directly.
+- **roadNet-CA is unchanged** (~115 ms for every queue variant): ~600 levels × the per-level round trip, with only 27–35 ms of GPU work. Load balancing cannot help here; this is Phase 7's target.
+- **Tiny graphs:** `gpu_edge` is best on ego-Facebook (1.2 ms), but CPU serial is 12× faster still.
+
+**Decisions**
+- The small bin uses a simdgroup-cooperative gather instead of a literal "each thread walks its list" loop (measured above).
+- Defaults: `gpu_binned` small < 16, large ≥ 256; `gpu_edge` ept 2; tg 256 for both.
+- The sweep uses the reduced protocol (16 sources × 3 trials), as in Phase 2; the results table uses the full protocol.
+
+**Open issues / notes**
+- The `gpu_vertex` level-5/6 advantage (access-order hypothesis) is to be checked in Phase 6/9.
+- The three bin dispatches run serially in one encoder. They are independent within a level, so a concurrent dispatch type could overlap the small-bin tail with large-bin work. That's a possible later optimization; not needed now, since levels are gather-bound.
