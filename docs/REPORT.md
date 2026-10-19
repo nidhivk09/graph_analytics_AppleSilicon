@@ -3,7 +3,8 @@
 ## Abstract
 
 This project implements breadth-first search (BFS) and PageRank as Metal compute
-kernels on an 8 GB Apple M2 and compares them with OpenMP CPU baselines on six
+kernels on an 8 GB Apple M2 and compares them with our own OpenMP CPU baselines
+and with the GAP Benchmark Suite (the state-of-the-art CPU reference) on six
 SNAP graphs. Every GPU result is checked against a serial CPU reference. BFS must
 match exactly; PageRank must have L1 error below 1e-4, with the reference itself
 cross-checked against NetworkX.
@@ -11,15 +12,19 @@ cross-checked against NetworkX.
 **BFS.** The best variant is a direction-optimizing BFS that runs small levels on
 the CPU, working in place on the GPU's buffers (no copies, thanks to unified memory).
 - It reaches **4.6–8.0 GTEPS** on the social graphs (LiveJournal 8.8 ms per traversal).
-- That is **1.7–2.4× faster than the best 8-thread CPU BFS** and **41–46× faster than serial**.
+- That is **1.7–2.3× faster than GAP's 8-thread BFS** (which our `cpu_do` matches
+  within 0–10%) and **41–46× faster than serial**.
 - On the road network (600+ levels), every GPU-only variant is limited by the
   ~0.2 ms fixed cost of each level. The hybrid wins by running nearly all levels
-  on the CPU.
+  on the CPU, and ties GAP restricted to the 4 performance cores.
 
 **PageRank.**
 - Pull-based kernels beat atomic push by 1.5–4.9×.
 - A degree-adaptive pull kernel is within 10% of the best variant on every graph.
-- The best GPU variant is 1.5–4.8× faster than 8-thread CPU PageRank.
+- **Per iteration**, the best GPU variant is 1.0–2.6× faster than GAP's 8-thread
+  PageRank (and 1.5–4.8× faster than our weaker `cpu_omp`).
+- **To convergence, GAP wins on every graph (1.1–2.1×).** Its Gauss–Seidel updates
+  need 29–34 iterations where the GPU's Jacobi iteration needs 44–62.
 - Real input orderings already carry most of the available locality: random labels
   slow PageRank 2–3×. Reverse Cuthill–McKee (RCM) improves on the input order for
   PageRank but *hurts* direction-optimizing BFS, because it delays bottom-up
@@ -179,6 +184,8 @@ Median ms per traversal:
 | cpu_serial | **0.10** | 31.2 | 36.7 | 151 | 401 | 541 |
 | cpu_omp (8 thr) | 0.31 | 14.9 | 37.7 | 51.2 | 126 | 188 |
 | cpu_do (8 thr) | 0.36 | 6.95 | 38.0 | 8.07 | 20.7 | 25.1 |
+| GAP bfs (8 thr) | 0.35 | 6.23 | 37.3 | 8.04 | 20.0 | 24.7 |
+| GAP bfs (4 thr) | 0.13 | 7.44 | 21.1 | 9.09 | 25.3 | 27.9 |
 | gpu_vertex | 2.65 | 13.6 | 304 | 16.9 | 30.9 | 70.3 |
 | gpu_naive | 4.45 | 17.9 | 99.4 | 27.0 | 60.4 | 116 |
 | gpu_binned | 1.30 | 9.82 | 104 | 16.7 | 41.6 | 67.0 |
@@ -296,6 +303,7 @@ graph. On the high-diameter graph, the bigger problem is using E-cores at all.
 |---|---|---|---|---|---|---|
 | cpu_serial | 0.11 | 9.73 | 11.5 | 32.4 | 122 | 259 |
 | cpu_omp (8 thr) | 0.10 | 2.67 | 3.11 | 10.2 | 42.5 | 138 |
+| GAP pr (8 thr) | 0.13 | 1.66 | 2.06 | 6.84 | 21.1 | 51.1 |
 | gpu_push | 0.61 | 2.13 | 1.58 | 19.0 | 30.5 | 239 |
 | gpu_pull_scalar | 0.13 | 2.41 | **0.80** | 9.00 | 16.3 | 65.8 |
 | gpu_pull_vector | **0.021** | **1.43** | 2.22 | **6.84** | **14.0** | **49.0** |
@@ -324,8 +332,9 @@ On ego-Facebook its three dispatches cost more than the work.
 **Convergence.** Every GPU variant converges in exactly the same number of
 iterations as the double-precision reference on all six graphs.
 
-**GPU vs CPU.** The best GPU variant is 1.5× (Pokec) to 4.8× (Facebook) faster than
-8-thread `cpu_omp`.
+**GPU vs CPU.** Per iteration, the best GPU variant is 1.5× (Pokec) to 4.8×
+(Facebook) faster than our 8-thread `cpu_omp`. Against GAP, the advantage is much
+smaller (1.0–2.6×), and GAP converges faster in wall time (see 4.12).
 
 **Phase 8 anomaly resolved.** Measured on battery, Orkut `gpu_pull_vector` was
 slower in fixed mode than in convergence mode. On AC the two agree (49.0 vs 49.9 ms
@@ -431,7 +440,7 @@ comparable to a 100 GB/s laptop chip, so we normalize by measured bandwidth:
 |---|---|---|---|
 | Facebook | cpu_serial | 0.86 | 9.1 |
 | web-Google | hybrid | 0.70 | 7.4 |
-| roadNet-CA | hybrid | 0.12 | 1.3 |
+| roadNet-CA | GAP bfs, 4 threads | 0.13 | 1.4 |
 | Pokec | hybrid | 4.58 | 48.1 |
 | LiveJournal | hybrid | 4.63 | 48.6 |
 | Orkut | hybrid | 8.03 | **84.3** |
@@ -457,6 +466,79 @@ run-to-run noise, with no consistent winner. Examples:
 
 These kernels are bound by memory latency, not occupancy, so the default stays at 256.
 
+### 4.12 External baseline: the GAP Benchmark Suite
+
+GAP (Beamer et al., commit `941462c`) is built with Apple clang and Homebrew libomp
+by `scripts/gap.sh`. Its Makefile assumes GCC's `-fopenmp`, so we pass
+`-Xpreprocessor -fopenmp` and libomp's paths on the make command line instead of
+patching it, with the same `-O3 -march=native` as our build.
+
+**Same graphs and sources.** `build/gexport` writes each `.bin` as GAP's `.sg`
+serialized CSR, so GAP runs on exactly our graphs. BFS uses the symmetrized graph;
+PageRank uses the directed graph with its transpose. BFS runs from our same 64
+sources (`-r`), 1 warm-up + 5 timed trials each, and uses our GTEPS denominators.
+GAP's own verifier passed for every source and every PageRank graph. Results:
+`results/gap_{bfs,pr,pr_converge}.csv`. Peak memory was 1.0 GB.
+
+**BFS: our CPU baseline holds up, and the GPU hybrid beats GAP.**
+- GAP at 8 threads is within 0–2% of our `cpu_do` on every graph except web-Google,
+  where it is 10% faster (6.23 vs 6.95 ms). Both implement the same Beamer
+  algorithm with the same α/β.
+- The hybrid is **1.7× (Pokec), 2.3× (LiveJournal) and 1.9× (Orkut)** faster than
+  GAP. On web-Google it is 3% slower.
+- On roadNet-CA, GAP with 4 threads (21.1 ms) is 4% faster than the hybrid (22.0 ms).
+  This confirms 4.4: there the hybrid *is* a CPU BFS, and the P-core-only CPU
+  wins. GAP with 8 threads is 1.8× slower than with 4 on roadNet, the same E-core
+  barrier effect as in 4.6.
+
+**PageRank per iteration: GAP is a much stronger CPU baseline than our `cpu_omp`.**
+GAP is 1.5–2.7× faster per iteration than our `cpu_omp` on the larger graphs. The
+reasons are visible in the two codes:
+- GAP keeps scores in float, so the randomly gathered contribution array is half
+  the size (19 MB vs 39 MB on LiveJournal).
+- GAP computes each vertex's outgoing contribution in the same loop that updates
+  it. Ours uses a separate pass, plus a serial copy of the double rank vector every
+  iteration.
+
+Against GAP, the best GPU variant is:
+- 2.6× faster on roadNet-CA and 1.5× on LiveJournal
+- 1.2× on web-Google
+- only **1.0–1.04× on Pokec and Orkut**
+
+The social graphs' GPU kernels reach only ~40% of bandwidth, because of random
+gathers (4.10). The CPU has the same latency problem (4.1), but GAP's float vectors
+fit its caches better.
+
+**PageRank to convergence: GAP wins.** Time to tol 1e-6, in ms (iterations):
+
+| dataset | our cpu_omp | GAP pr (8 thr) | best GPU pull | GPU vs GAP |
+|---|---|---|---|---|
+| Facebook | 4.70 (48) | 4.50 (33) | 9.51 (48, vector) | 0.47× |
+| web-Google | 186 (62) | 53.8 (32) | 107 (62, vector) | 0.50× |
+| roadNet-CA | 205 (57) | 65.0 (34) | 72.7 (57, adaptive) | 0.89× |
+| Pokec | 484 (44) | 197 (29) | 320 (44, vector) | 0.62× |
+| LiveJournal | 2132 (49) | 650 (31) | 719 (49, vector) | 0.90× |
+| Orkut | 6306 (45) | 1522 (29) | 2247 (45, vector) | 0.68× |
+
+GAP updates scores **in place (Gauss–Seidel)**: a vertex sees neighbors' new values
+from the same sweep. It reaches tol 1e-6 in 29–34 iterations, against 44–62 for the
+Jacobi iteration used by our CPU reference and all GPU variants. That 31–48% cut in
+iterations outweighs the GPU's per-iteration lead on every graph. GAP's time to
+solution is 1.1× (LiveJournal, roadNet) to 2.1× (Facebook, web-Google) better.
+
+Two caveats make this comparison indicative, not exact:
+- **The fixed point differs.** GAP's kernel does not redistribute dangling mass, so
+  its ranks are a different vector from ours; its accuracy was checked only by GAP's
+  own verifier.
+- **The stopping rule differs.** Its stopping test measures change *during* a sweep,
+  and its iteration count varies run to run (Orkut 23–30), because parallel
+  in-place updates race.
+
+Still, the lesson is clear. **The algorithmic choice (Gauss–Seidel vs Jacobi) is
+worth as much as the hardware choice here.** The GPU kernels could adopt it:
+in-place, race-tolerant updates need no synchronization beyond what the pull
+kernels already do. It is listed as future work.
+
 ## 5. Summary of hypotheses (PLAN §10)
 
 | hypothesis | outcome |
@@ -467,6 +549,7 @@ These kernels are bound by memory latency, not occupancy, so the default stays a
 | Pull beats push; vector wins on high degree; scalar may win on roadNet-CA | **Confirmed** (1.5–4.9×; scalar 2.8× faster on roadNet-CA) |
 | Random ordering much slower; RCM/degree may improve | **Confirmed for random** (1.9–3.1×). RCM helps PageRank (up to 2.3×) but hurts DO-BFS on social graphs; degree helps only web-Google |
 | Smaller graphs have higher GTEPS due to the cache | **Wrong for BFS** (fixed per-level costs dominate small graphs). Weakly true for PageRank, where locality matters more |
+| (Phase 11) GAP as the state-of-the-art CPU baseline | Our `cpu_do` matches GAP's BFS; the hybrid beats it 1.7–2.3× on social graphs. GAP's PageRank nearly ties the GPU per iteration on Pokec/Orkut and wins to convergence through Gauss–Seidel |
 
 ## 6. Limitations
 
@@ -486,9 +569,11 @@ These kernels are bound by memory latency, not occupancy, so the default stays a
   hit a float convergence floor above tol; a stagnation guard handles that case.
 - **Graph size.** The 8 GB memory limits graphs to ~250M stored edges (Orkut) under
   the 3 GB process budget. Larger graphs (Friendster, Twitter) were not run.
-- **No external baseline.** The GAP Benchmark Suite comparison (optional Phase 11)
-  was not run. The CPU baselines are our own OpenMP code, which follows GAP's
-  algorithms but is not GAP itself.
+- **Our CPU PageRank baseline is weak.** `cpu_omp` (double, separate contribution
+  pass, serial copy) is 1.5–2.7× slower per iteration than GAP. GPU-vs-CPU PageRank
+  claims should be read against GAP (4.12), not against `cpu_omp`.
+- **GAP PageRank is not the same computation.** It uses Gauss–Seidel and has no
+  dangling redistribution, so only timing, not ranks, is compared.
 - **`hybrid` on roadNet-CA is effectively a CPU BFS.** Its win there shows that
   switching device is free, not that the GPU helped.
 
@@ -501,7 +586,10 @@ These kernels are bound by memory latency, not occupancy, so the default stays a
   could combine RCM's PageRank locality with fast bottom-up exits (4.8).
 - **Restrict OpenMP to P-cores** (thread affinity / QoS classes) for barrier-heavy
   phases, and give E-cores only independent work.
-- **Run the GAP Benchmark Suite** on the same graphs as an external CPU reference.
+- **Gauss–Seidel (in-place) PageRank on the GPU.** GAP's in-place updates need
+  31–48% fewer iterations (4.12). A GPU pull kernel that writes the new
+  contribution in place would get most of that benefit. Validation would then
+  need a convergence-based check rather than iteration-count agreement.
 - **Compressed or 16-bit-delta CSR** to fit larger graphs in 8 GB and to reduce
   bytes per edge on this bandwidth-bound chip.
 - **Asynchronous / delta PageRank**, which touches only vertices whose rank still
@@ -528,5 +616,5 @@ These kernels are bound by memory latency, not occupancy, so the default stays a
 
 ---
 *Reproduce:* `./scripts/run_all.sh` (≈75 min on this machine; the tuning sweeps run
-only when named: `./scripts/run_all.sh tuning_balanced tuning_do tuning_tg`). Figures: `.venv/bin/python analysis/plots.py`. Tables:
+only when named: `./scripts/run_all.sh tuning_balanced tuning_do tuning_tg`); GAP baseline: `./scripts/gap.sh` (≈6 min). Figures: `.venv/bin/python analysis/plots.py`. Tables:
 `.venv/bin/python analysis/report_tables.py`.

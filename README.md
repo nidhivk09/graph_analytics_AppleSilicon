@@ -1,7 +1,7 @@
 # graph-gpu: BFS and PageRank on Apple Silicon (Metal)
 
 Breadth-first search and PageRank as Metal compute kernels on an 8 GB Apple M2,
-compared with OpenMP CPU baselines on six SNAP graphs (4K to 234M edges). Every
+compared with OpenMP CPU baselines and the GAP Benchmark Suite on six SNAP graphs (4K to 234M edges). Every
 GPU result is validated against a serial CPU reference: BFS must match exactly,
 and PageRank must have L1 error < 1e-4. The full write-up with all figures is
 **[docs/REPORT.md](docs/REPORT.md)**. `PLAN.md` holds the design and
@@ -13,20 +13,26 @@ and PageRank must have L1 error < 1e-4. The full write-up with all figures is
 |---|---|---|---|
 | BFS `cpu_serial` | 401 ms | 541 ms | 36.7 ms |
 | BFS `cpu_do`, 8 threads | 20.7 ms | 25.1 ms | 38.0 ms |
+| BFS GAP, 8 threads (4 threads) | 20.0 ms | 24.7 ms | 37.3 ms (**21.1 ms**) |
 | BFS `gpu_do` (direction-optimizing, GPU only) | 10.7 ms | 13.3 ms | 113 ms |
 | BFS `hybrid` (small levels on CPU, shared buffers) | **8.8 ms (4.6 GTEPS)** | **13.1 ms (8.0 GTEPS)** | **22.0 ms** |
 | PageRank `cpu_omp`, ms/iteration | 42.5 | 138 | 3.11 |
+| PageRank GAP, 8 threads, ms/iteration | 21.1 | 51.1 | 2.06 |
 | PageRank best GPU pull, ms/iteration | **14.0** | **49.0** | **0.80** |
+| PageRank to tol 1e-6: GAP vs best GPU | **650** vs 719 ms | **1522** vs 2247 ms | **65** vs 73 ms |
 
 - **Direction optimization is the big win on social graphs.** `gpu_do` is 3–5×
-  faster than load-balanced top-down GPU BFS. The hybrid is 1.7–2.4× faster than
-  the best 8-thread CPU BFS and 41–46× faster than serial.
+  faster than load-balanced top-down GPU BFS. The hybrid is 1.7–2.3× faster than
+  GAP's 8-thread BFS (which our `cpu_do` matches) and 41–46× faster than serial.
 - **High-diameter graphs are bound by per-level sync, not bandwidth.** Each GPU
   level costs ~0.2 ms however small it is. On roadNet-CA the hybrid runs those
-  levels on the CPU at zero copy cost and beats GPU-only BFS by 5.1×.
+  levels on the CPU at zero copy cost and beats GPU-only BFS by 5.1×, though
+  GAP on the 4 P-cores alone is as fast.
 - **PageRank: pull beats atomic push by 1.5–4.9×.** Simdgroup-per-vertex wins on
   skewed graphs; thread-per-vertex wins by 2.8× on the road network; a
-  degree-adaptive kernel is within 10% of the best everywhere.
+  degree-adaptive kernel is within 10% of the best everywhere. Against GAP the GPU
+  is 1.0–2.6× faster per iteration, but GAP's Gauss–Seidel needs ~40% fewer
+  iterations and **reaches convergence first on every graph**.
 - **Orderings:** random labels cost 2–3× in PageRank. Reverse Cuthill–McKee helps
   PageRank (up to 2.3× on web-Google) but slows bottom-up BFS on social graphs,
   because it delays early exits.
@@ -118,6 +124,8 @@ make && make test                        # zero-warning build + 24 test groups
                                          #  Low Power Mode unless FORCE=1; logs in logs/)
 ./scripts/run_all.sh pr reorder plots    # or just some stages
 ./scripts/run_all.sh tuning_balanced tuning_do tuning_tg   # the parameter sweeps (not rerun by default)
+./scripts/gap.sh                         # GAP baseline: clones gapbs (pinned) into external/, builds
+                                         # with libomp, runs it on our graphs and sources (~6 min)
 .venv/bin/python analysis/plots.py       # regenerate the 11 figures (PNG + SVG) from results/
 .venv/bin/python analysis/report_tables.py   # markdown tables used in docs/REPORT.md
 ```
@@ -130,6 +138,7 @@ src/cpu     CPU BFS / PageRank (serial reference + OpenMP)
 src/metal   Metal context, GPU BFS / PageRank, primitives
 src/shaders Metal Shading Language kernels (compiled at runtime)
 src/bench   gbench (benchmark CLI), gmicro (microbenchmarks)
+            (src/graph/export_sg.cpp = gexport: .bin -> GAP .sg)
 tests/      assert-based unit tests (make test)
 scripts/    environment, data download, full benchmark run
 analysis/   plotting; results/ CSVs; figures/ plots; docs/REPORT.md

@@ -4,7 +4,7 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 10 complete** (2026-10-19). All PLAN phases 0–10 are done; Phase 11 (GAP external baseline) is optional and not started.
+- **Phase 11 complete** (2026-10-19). All PLAN phases 0–11 are done. GAP baseline: `scripts/gap.sh` (GAP in gitignored `external/gapbs`, pinned to 941462c).
 - Final results: `docs/REPORT.md` (11 figures in `figures/`, all from one `scripts/run_all.sh` run on AC power).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
@@ -740,3 +740,49 @@ PageRank `gpu_pull_adaptive`:
 **Open issues / notes**
 - ego-Facebook PageRank at ~0.02–0.06 ms/iteration varies up to 2× between runs (`pr.csv` vs `reorder_pr.csv`). These numbers are noted as noise in the report's limitations; no conclusions are drawn from them.
 - Not done (future work in the report): indirect dispatch to cut per-level syncs, hub-first neighbor order within lists, P-core-only OpenMP, Phase 11 GAP baseline.
+
+### 2026-10-19 · Phase 11: external reference (GAP Benchmark Suite)
+
+**Built**
+- `scripts/gap.sh`:
+  - clones gapbs into `external/gapbs` (gitignored) at a pinned commit (941462c)
+  - builds `bfs` and `pr` with Apple clang + libomp by overriding `CXX_FLAGS` on the make command line (`-Xpreprocessor -fopenmp`, libomp include/lib, `-O3 -march=native -mmacosx-version-min=26.0`). No GAP source or Makefile is patched, and the build has 0 warnings.
+  - checks power, then runs `tools/run_gap.py`
+- `build/gexport` (`src/graph/export_sg.cpp`): `.bin` → GAP `.sg` (bool directed, int64 m, int64 n, int64 offsets, int32 neighbors, plus in-CSR if directed). `--sym` writes the symmetrized graph for BFS. GAP therefore runs on exactly our graphs (web-Google: GAP reports 4,322,051 undirected edges, same as our stats).
+- `tools/run_gap.py`: exports each graph to `build/sg/` (deleted after use, so `data/` never grows). Then:
+  - **BFS:** runs GAP from **our 64 sources** (`-r`, `-n 6`, first trial dropped as warm-up) at 8 and 4 threads, with GTEPS from our per-source component-edge denominators.
+  - **PageRank:** fixed 20 iterations (`-i 20 -t 0`, 2 warm-up + 5 trials) at 8 and 4 threads, plus time to tol 1e-6 (`-l` counts iterations).
+  - **Correctness:** GAP's verifier, one `-v` run per BFS source and per PageRank graph. All passed.
+  - Output: `results/gap_bfs.csv`, `gap_pr.csv`, `gap_pr_converge.csv` in our schema (variants `gap_bfs`, `gap_bfs_4t`, `gap_pr`, `gap_pr_4t`).
+- `plots.py` / `report_tables.py` include `gap_bfs` / `gap_pr` when the CSVs exist (figs 4 and 8; new `converge` table). The efficiency table now picks the best variant from all variants, including GAP.
+- Run: ~6 min, peak RSS 1.0 GB, AC power.
+
+**Results**
+
+| | Facebook | web-Google | roadNet-CA | Pokec | LiveJournal | Orkut |
+|---|---|---|---|---|---|---|
+| BFS cpu_do (8t), ms | 0.36 | 6.95 | 38.0 | 8.07 | 20.7 | 25.1 |
+| BFS GAP (8t) | 0.35 | 6.23 | 37.3 | 8.04 | 20.0 | 24.7 |
+| BFS GAP (4t) | 0.13 | 7.44 | **21.1** | 9.09 | 25.3 | 27.9 |
+| BFS hybrid | 0.84 | 6.42 | 22.0 | **4.76** | **8.76** | **13.1** |
+| PR cpu_omp ms/it | 0.10 | 2.67 | 3.11 | 10.2 | 42.5 | 138 |
+| PR GAP (8t) ms/it | 0.13 | 1.66 | 2.06 | 6.84 | 21.1 | 51.1 |
+| PR best GPU ms/it | 0.021 | 1.43 | 0.80 | 6.84 | 14.0 | 49.0 |
+| PR to 1e-6, GAP ms (iters) | 4.50 (33) | 53.8 (32) | 65.0 (34) | 197 (29) | 650 (31) | 1522 (29) |
+| PR to 1e-6, best GPU ms (iters) | 9.51 (48) | 107 (62) | 72.7 (57) | 320 (44) | 719 (49) | 2247 (45) |
+
+**Findings**
+- **Our `cpu_do` is a faithful GAP-class baseline.** It is within 0–2% of GAP's BFS everywhere except web-Google (GAP 10% faster). The hybrid beats GAP 1.7–2.3× on the social graphs.
+- **roadNet-CA:** GAP at 4 threads (21.1) edges out the hybrid (22.0), and GAP at 8 threads is 1.8× slower than at 4. This confirms the Phase 10 reading: the hybrid is a CPU BFS there, and E-cores hurt.
+- **Our `cpu_omp` PageRank was a weak baseline:** GAP is 1.5–2.7× faster per iteration. Causes visible in the code: GAP gathers float contributions (half the footprint), computes contributions in the same loop that updates scores, and ours does a serial copy of the rank vector each iteration.
+- **Against GAP, the GPU's per-iteration PageRank lead is 1.0–2.6×** (ties on Pokec and Orkut).
+- **To convergence, GAP wins on every graph (1.1–2.1×).** In-place Gauss–Seidel needs 29–34 iterations vs 44–62 for Jacobi.
+- **Caveats** (in the report): GAP's PageRank has no dangling redistribution, so it converges to a different vector. Its in-sweep stopping test makes iteration counts nondeterministic (Orkut 23–30).
+- **Report changes:**
+  - updated the abstract, 4.3, 4.7, efficiency and limitations
+  - added section 4.12
+  - moved "run GAP" out of future work and added "Gauss–Seidel PageRank on the GPU"
+  - the "1.5–4.8× faster than CPU PageRank" claim is now qualified as being against our `cpu_omp`
+
+**Open issues / notes**
+- None blocking. Possible follow-ups: GPU in-place (Gauss–Seidel) PageRank; P-core-only OpenMP; indirect dispatch for BFS.

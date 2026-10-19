@@ -29,7 +29,8 @@ LIB_SRCS := src/metal/context.mm src/metal/primitives.mm src/metal/bfs_gpu.mm \
             src/graph/generators.cpp src/cpu/bfs_cpu.cpp src/cpu/bfs_steps.cpp
 LIB_OBJS := $(patsubst src/%,$(OBJDIR)/%.o,$(LIB_SRCS))
 
-BINS := $(BUILD)/gmicro $(BUILD)/gtest $(BUILD)/gconvert $(BUILD)/gstats $(BUILD)/gbench
+BINS := $(BUILD)/gmicro $(BUILD)/gtest $(BUILD)/gconvert $(BUILD)/gstats $(BUILD)/gbench \
+        $(BUILD)/gexport
 
 .PHONY: all test clean
 all: $(BINS)
@@ -44,6 +45,10 @@ $(BUILD)/gbench: $(OBJDIR)/bench/main.cpp.o $(LIB_OBJS)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD)/gstats: $(OBJDIR)/graph/stats.cpp.o $(LIB_OBJS)
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+# Phase 11: .bin -> GAP .sg, so GAP runs on exactly our graphs.
+$(BUILD)/gexport: $(OBJDIR)/graph/export_sg.cpp.o $(LIB_OBJS)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD)/gtest: $(OBJDIR)/tests/test_main.cpp.o $(LIB_OBJS)

@@ -27,9 +27,10 @@ FIG = os.path.join(ROOT, "figures")
 DATASETS = ["ego-Facebook", "web-Google", "roadNet-CA", "soc-Pokec", "soc-LiveJournal1", "com-Orkut"]
 SHORT = {"ego-Facebook": "Facebook", "web-Google": "web-Google", "roadNet-CA": "roadNet-CA",
          "soc-Pokec": "Pokec", "soc-LiveJournal1": "LiveJournal", "com-Orkut": "Orkut"}
-BFS_VARIANTS = ["cpu_serial", "cpu_omp", "cpu_do", "gpu_vertex", "gpu_naive", "gpu_binned", "gpu_edge",
+# gap_* = GAP Benchmark Suite (Phase 11, external CPU baseline, 8 threads).
+BFS_VARIANTS = ["cpu_serial", "cpu_omp", "cpu_do", "gap_bfs", "gpu_vertex", "gpu_naive", "gpu_binned", "gpu_edge",
                 "gpu_do", "hybrid"]
-PR_VARIANTS = ["cpu_serial", "cpu_omp", "gpu_push", "gpu_pull_scalar", "gpu_pull_vector", "gpu_pull_adaptive"]
+PR_VARIANTS = ["cpu_serial", "cpu_omp", "gap_pr", "gpu_push", "gpu_pull_scalar", "gpu_pull_vector", "gpu_pull_adaptive"]
 ORDERINGS = ["original", "random", "degree", "rcm"]
 
 plt.rcParams.update({"figure.dpi": 110, "savefig.dpi": 150, "font.size": 9, "axes.grid": True,
@@ -50,6 +51,19 @@ def save(fig, name):
         fig.savefig(os.path.join(FIG, f"{name}.{ext}"))
     plt.close(fig)
     print(f"  wrote figures/{name}.png/.svg")
+
+
+def optional(*names):
+    """The CSVs that exist (gap_*.csv only after scripts/gap.sh)."""
+    return [csv(n) for n in names if os.path.exists(os.path.join(RES, n))]
+
+
+def bfs_all():
+    return pd.concat([csv("bfs_cpu.csv"), csv("bfs_gpu.csv")] + optional("gap_bfs.csv"))
+
+
+def pr_all():
+    return pd.concat([csv("pr.csv")] + optional("gap_pr.csv"))
 
 
 def bfs_summary(df):
@@ -173,8 +187,7 @@ def fig3_frontier():
 
 
 def fig4_bfs_gteps():
-    parts = [csv("bfs_cpu.csv"), csv("bfs_gpu.csv")]
-    s = bfs_summary(pd.concat(parts))
+    s = bfs_summary(bfs_all())
     table = {v: dict(zip(g.dataset, g.gteps)) for v, g in s.groupby("variant")}
     series = [v for v in BFS_VARIANTS if v in table]
     fig, ax = plt.subplots(figsize=(11, 4.2))
@@ -269,7 +282,7 @@ def fig7_scaling():
 
 
 def fig8_pagerank():
-    s = pr_summary(csv("pr.csv"))
+    s = pr_summary(pr_all())
     table = {v: dict(zip(g.dataset, g.ms_it)) for v, g in s.groupby("variant")}
     series = [v for v in PR_VARIANTS if v in table]
     fig, ax = plt.subplots(figsize=(11, 4.2))

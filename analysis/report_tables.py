@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pandas as pd  # noqa: E402
 
-from plots import (DATASETS, ORDERINGS, PR_VARIANTS, BFS_VARIANTS, SHORT, bfs_summary, csv,  # noqa: E402
+from plots import (DATASETS, ORDERINGS, PR_VARIANTS, BFS_VARIANTS, SHORT, bfs_all, bfs_summary, csv, optional, pr_all,  # noqa: E402
                    peak_gpu_bw, pr_summary)
 
 
@@ -46,10 +46,12 @@ def datasets():
 
 
 def bfs():
-    s = bfs_summary(pd.concat([csv("bfs_cpu.csv"), csv("bfs_gpu.csv")]))
+    s = bfs_summary(bfs_all())
     t = {(r.dataset, r.variant): r for r in s.itertuples()}
     rows_ms, rows_gt = [], []
-    for v in BFS_VARIANTS:
+    for v in BFS_VARIANTS + ["gap_bfs_4t"]:
+        if not any((d, v) in t for d in DATASETS):
+            continue
         rows_ms.append([v] + [fmt(t[(d, v)].median_ms) if (d, v) in t else "–" for d in DATASETS])
         rows_gt.append([v] + [fmt(t[(d, v)].gteps) if (d, v) in t else "–" for d in DATASETS])
     hdr = ["variant"] + [SHORT[d] for d in DATASETS]
@@ -63,14 +65,36 @@ def star():
 
 
 def pagerank():
-    s = pr_summary(csv("pr.csv"))
+    s = pr_summary(pr_all())
     t = {(r.dataset, r.variant): r.ms_it for r in s.itertuples()}
-    rows = [[v] + [fmt(t.get((d, v), float("nan"))) for d in DATASETS] for v in PR_VARIANTS]
+    rows = [[v] + [fmt(t.get((d, v), float("nan"))) for d in DATASETS] for v in PR_VARIANTS + ["gap_pr_4t"]
+            if any((d, v) in t for d in DATASETS)]
     c = csv("pr_converge.csv")
     it = c.groupby(["dataset", "variant"]).iters.median()
     conv = [["iterations to 1e-6"] + [
         "/".join(sorted({str(int(it[(d, v)])) for v in PR_VARIANTS if (d, v) in it})) for d in DATASETS]]
     return md(["variant"] + [SHORT[d] for d in DATASETS], rows + conv)
+
+
+def converge():
+    """Time to tol 1e-6: our variants (Jacobi) vs GAP (Gauss-Seidel, fewer iterations)."""
+    c = pd.concat([csv("pr_converge.csv")] + optional("gap_pr_converge.csv"))
+    g = c.groupby(["dataset", "variant"]).agg(ms=("time_ms_e2e", "median"), it=("iters", "median"))
+    rows = []
+    for d in DATASETS:
+        gpu = g.loc[d].loc[[v for v in g.loc[d].index if v.startswith("gpu_pull")]].ms
+        best = gpu.idxmin()
+        cells = [SHORT[d], f"{fmt(g.loc[(d, 'cpu_omp'), 'ms'])} ({int(g.loc[(d, 'cpu_omp'), 'it'])})"]
+        if (d, "gap_pr") in g.index:
+            cells.append(f"{fmt(g.loc[(d, 'gap_pr'), 'ms'])} ({int(g.loc[(d, 'gap_pr'), 'it'])})")
+        else:
+            cells.append("–")
+        cells += [f"{fmt(gpu[best])} ({int(g.loc[(d, best), 'it'])}, {best.replace('gpu_pull_', '')})"]
+        if (d, "gap_pr") in g.index:
+            cells.append(f"{g.loc[(d, 'gap_pr'), 'ms'] / gpu[best]:.2f}x")
+        rows.append(cells)
+    return ("PageRank time to tol 1e-6, ms (iterations):\n\n" +
+            md(["dataset", "cpu_omp", "GAP pr (8 thr)", "best GPU pull", "GPU speedup vs GAP"], rows))
 
 
 def reorder():
@@ -97,7 +121,7 @@ def reorder():
 
 def efficiency():
     peak = peak_gpu_bw()
-    s = bfs_summary(pd.concat([csv("bfs_cpu.csv"), csv("bfs_gpu.csv")]))
+    s = bfs_summary(bfs_all())
     rows = []
     for d in DATASETS:
         g = s[s.dataset == d].set_index("variant")
@@ -107,7 +131,7 @@ def efficiency():
             md(["dataset", "best BFS variant", "GTEPS", "MTEPS per GB/s"], rows))
 
 
-SECTIONS = {"datasets": datasets, "bfs": bfs, "star": star, "pagerank": pagerank, "reorder": reorder,
+SECTIONS = {"datasets": datasets, "bfs": bfs, "star": star, "pagerank": pagerank, "converge": converge, "reorder": reorder,
             "efficiency": efficiency}
 
 if __name__ == "__main__":
