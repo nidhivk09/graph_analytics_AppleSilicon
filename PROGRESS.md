@@ -5,7 +5,7 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 ## Current state
 
 - **Phase 13 (extension) complete** (2026-10-20): straggler fixes for `gpu_pull_gs` (pair deferral, per-vertex stopping test). Phase 12 (2026-10-19): in-place GPU PageRank. All PLAN phases 0–11 are done.
-- Presentation website: `docs/index.html` (standalone, figures in `docs/figures`); also published as a private claude.ai artifact. GAP baseline: `scripts/gap.sh` (GAP in gitignored `external/gapbs`, pinned to 941462c).
+- Presentation website: `docs/index.html` (standalone, figures in `docs/figures`). GAP baseline: `scripts/gap.sh` (GAP in gitignored `external/gapbs`, pinned to 941462c).
 - Final results: `docs/REPORT.md` (11 figures in `figures/`, all from one `scripts/run_all.sh` run on AC power).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
@@ -878,4 +878,4 @@ Equal accuracy vs the best Jacobi GPU kernel (Phase 12 → Phase 13):
 
 **Per-vertex test verdict:** the fastest safe rule on web-Google and Orkut. On LiveJournal and Pokec it over-iterates (45–56 sweeps), because some low-rank vertex keeps moving ~0.2% after the L1 test fires. So it is a stronger guarantee, not a universal speed-up.
 
-**Website:** `docs/index.html`. It has the problem statement, an explanation section with two interactive demos (a BFS top-down/bottom-up stepper, and a PageRank Jacobi / GPU-wave / deferral / sequential-GS simulator on a 1,000-vertex model graph, prototyped in Node to check it shows the effect), setup, approach timeline, all results with figures, findings, the hypothesis table, conclusion, limits and reproduction steps. Also published privately as a claude.ai artifact.
+**Website:** `docs/index.html`. It has the problem statement, an explanation section with two interactive demos (a BFS top-down/bottom-up stepper, and a PageRank Jacobi / GPU-wave / deferral / sequential-GS simulator on a 1,000-vertex model graph, prototyped in Node to check it shows the effect), setup, approach timeline, all results with figures, findings, the hypothesis table, conclusion, limits and reproduction steps.

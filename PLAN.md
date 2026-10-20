@@ -1,6 +1,6 @@
 # Project Plan: Graph Analytics on Apple Silicon (BFS + PageRank in Metal)
 
-## 0. Instructions for Claude Code (read first)
+## 0. Working instructions (read first)
 
 You are building a complete research-style project: high-performance BFS and PageRank on an Apple M2 GPU using Metal, with CPU baselines, careful benchmarking, and a final report with figures.
 
