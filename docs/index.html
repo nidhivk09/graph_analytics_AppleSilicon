@@ -7,7 +7,7 @@
 <title>Graph Analytics on M2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* base reset */
 body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important; }
@@ -29,22 +29,23 @@ body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important
   --s-defer: #1f8a74;
   --code-bg: #eef1f5;
   --plate: #ffffff;
-  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-display: "Poppins", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Poppins", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --glow: #d8902f;
   --font-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #0f141a; --surface: #161d25; --ink: #e5eaf0; --muted: #96a3b0; --rule: #2a3542;
     --cpu: #86a8de; --gpu: #e48d60; --gpu-soft: #3a2519; --cpu-soft: #1c2a3f;
-    --good: #63c58b; --bad: #ec7b7b; --s-jacobi: #9aa6b3; --s-defer: #4fc4a8; --code-bg: #1b232d; --plate: #f4f6f8;
+    --good: #63c58b; --bad: #ec7b7b; --s-jacobi: #9aa6b3; --s-defer: #4fc4a8; --code-bg: #1b232d; --plate: #f4f6f8; --glow: #ffc27a;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --paper: #0f141a; --surface: #161d25; --ink: #e5eaf0; --muted: #96a3b0; --rule: #2a3542;
   --cpu: #86a8de; --gpu: #e48d60; --gpu-soft: #3a2519; --cpu-soft: #1c2a3f;
-  --good: #63c58b; --bad: #ec7b7b; --s-jacobi: #9aa6b3; --s-defer: #4fc4a8; --code-bg: #1b232d; --plate: #f4f6f8;
+  --good: #63c58b; --bad: #ec7b7b; --s-jacobi: #9aa6b3; --s-defer: #4fc4a8; --code-bg: #1b232d; --plate: #f4f6f8; --glow: #ffc27a;
   color-scheme: dark;
 }
 
@@ -53,7 +54,7 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
   background: var(--paper); color: var(--ink);
-  font-family: var(--font-body); font-size: 1.0625rem; line-height: 1.6;
+  font-family: var(--font-body); font-size: 1rem; line-height: 1.7;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
@@ -163,6 +164,128 @@ input[type="range"] { width: 100%; accent-color: var(--gpu); }
 .foot { color: var(--muted); font-size: 0.9rem; border-top: 1px solid var(--rule); padding-top: 18px; }
 pre.cmd { font-family: var(--font-data); font-size: 0.84rem; background: var(--code-bg); border-radius: 10px; padding: 14px 16px; overflow-x: auto; line-height: 1.55; margin: 0; }
 ol.refs { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; max-width: 80ch; font-size: 0.95rem; }
+
+/* ---------- hero backdrop ---------- */
+.hero { position: relative; isolation: isolate; }
+#hero-net { position: absolute; inset: -28px -8px auto -8px; height: calc(100% + 40px); width: calc(100% + 16px); z-index: -1; opacity: 0.55; pointer-events: none; }
+.hero h1 .gpu { background: linear-gradient(90deg, var(--gpu), var(--glow)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ---------- live simulation stage (deliberately dark in both themes) ---------- */
+.stage { --st-bg: #0a0f15; --st-panel: #111923; --st-line: #233041; --st-ink: #e8eef4; --st-muted: #8d9bab; --st-gpu: #ff8a4c; --st-cpu: #6eaaff; --st-bu: #4fe0d0;
+  background: radial-gradient(120% 90% at 20% 0%, #16212e 0%, var(--st-bg) 55%); color: var(--st-ink); border-radius: 16px; border: 1px solid var(--st-line);
+  padding: 16px; display: grid; gap: 14px; box-shadow: 0 18px 50px -24px rgba(10, 15, 21, 0.65); min-width: 0; }
+.stage-bar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.seg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.seg-lbl { font-family: var(--font-data); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--st-muted); margin-right: 2px; }
+.seg-btn { background: transparent; border: 1px solid var(--st-line); color: var(--st-ink); font-weight: 500; font-size: 0.82rem; padding: 6px 12px; border-radius: 999px; }
+.seg-btn.on { background: var(--st-gpu); border-color: var(--st-gpu); color: #1a0d05; font-weight: 600; }
+.seg-btn:hover:not(.on) { border-color: var(--st-muted); }
+.stage-main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .stage-main { grid-template-columns: minmax(0, 1fr); } }
+.stage-canvas-wrap { position: relative; background: #070b10; border: 1px solid var(--st-line); border-radius: 12px; overflow: hidden; min-width: 0; }
+#sim-canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; }
+.stage-overlay { position: absolute; left: 12px; top: 10px; font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--st-ink); background: rgba(10, 15, 21, 0.7); border: 1px solid var(--st-line); padding: 4px 10px; border-radius: 999px; pointer-events: none; }
+.stage-side { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--st-panel); border: 1px solid var(--st-line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 2px; }
+.stat.wide { grid-column: 1 / -1; }
+.stat .k, .clock .k { font-family: var(--font-data); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--st-muted); }
+.stat .v { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.stat .v.gpu { color: var(--st-gpu); } .stat .v.cpu { color: var(--st-cpu); } .stat .v.bu { color: var(--st-bu); }
+.chipview { background: var(--st-panel); border: 1px solid var(--st-line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
+.chip-head { display: flex; justify-content: space-between; gap: 8px; font-family: var(--font-data); font-size: 0.68rem; color: var(--st-muted); letter-spacing: 0.04em; }
+.gpu-lanes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.gcore { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 4px; border: 1px solid var(--st-line); border-radius: 6px; }
+.gcore i { display: block; aspect-ratio: 1; border-radius: 2px; background: #1b2633; transition: background 0.25s, box-shadow 0.25s; }
+.gcore i.on { background: var(--st-gpu); box-shadow: 0 0 6px var(--st-gpu); animation: flick 0.6s infinite alternate; }
+.gcore i.on.bu { background: var(--st-bu); box-shadow: 0 0 6px var(--st-bu); }
+@keyframes flick { from { opacity: 1; } to { opacity: 0.55; } }
+.cpu-lanes { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.ccore { height: 26px; border-radius: 6px; border: 1px solid var(--st-line); background: #1b2633; display: grid; place-items: center; font-family: var(--font-data); font-size: 0.65rem; color: var(--st-muted); transition: background 0.25s, box-shadow 0.25s; }
+.ccore.e { height: 20px; align-self: end; }
+.ccore.on { background: var(--st-cpu); color: #06121f; box-shadow: 0 0 10px var(--st-cpu); }
+.clock { background: var(--st-panel); border: 1px solid var(--st-line); border-radius: 10px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.clock .v { font-family: var(--font-data); font-weight: 600; font-size: 1.3rem; color: var(--st-ink); font-variant-numeric: tabular-nums; }
+.stage-bottom { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .stage-bottom { grid-template-columns: minmax(0, 1fr); } }
+.timeline-wrap { background: var(--st-panel); border: 1px solid var(--st-line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; min-width: 0; }
+.timeline { height: 92px; display: flex; align-items: flex-end; gap: 3px; overflow: hidden; }
+.timeline .bar { flex: 1 1 0; max-width: 28px; min-width: 3px; border-radius: 3px 3px 0 0; background: var(--st-gpu); position: relative; animation: grow 0.35s ease-out; }
+.timeline .bar.cpu { background: var(--st-cpu); }
+.timeline .bar.bu { background: repeating-linear-gradient(135deg, var(--st-gpu) 0 4px, var(--st-bu) 4px 8px); }
+@keyframes grow { from { transform: scaleY(0); transform-origin: bottom; } to { transform: scaleY(1); transform-origin: bottom; } }
+.key { display: inline-flex; gap: 6px; align-items: center; }
+.key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.key .kg { background: var(--st-gpu); } .key .kc { background: var(--st-cpu); }
+.totals { background: var(--st-panel); border: 1px solid var(--st-line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; align-content: start; }
+.trow { display: grid; gap: 4px; padding: 4px 6px; border-radius: 8px; border: 1px solid transparent; }
+.trow.on { border-color: var(--st-gpu); background: rgba(255, 138, 76, 0.07); }
+.trow .tl { display: flex; justify-content: space-between; gap: 8px; font-size: 0.8rem; }
+.trow .tl b { font-weight: 600; }
+.trow .tl span { font-family: var(--font-data); font-size: 0.72rem; color: var(--st-muted); }
+.trow .track { height: 8px; background: #1b2633; border-radius: 99px; overflow: hidden; }
+.trow .fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--st-gpu), #ffc08f); transition: width 0.6s ease; }
+.trow.hy .fill { background: linear-gradient(90deg, var(--st-cpu), var(--st-gpu)); }
+.stage-ctl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.stage-ctl button { background: var(--st-gpu); border-color: var(--st-gpu); color: #1a0d05; }
+.stage-ctl button.ghost { background: transparent; color: var(--st-ink); border-color: var(--st-line); }
+.stage-ctl .speed { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-data); font-size: 0.75rem; color: var(--st-muted); margin-left: auto; }
+.stage-ctl .speed input { width: 130px; accent-color: var(--st-gpu); }
+
+/* ---------- explanation diagrams ---------- */
+.mapping { display: grid; gap: 10px; }
+.maprow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 16px; align-items: center; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; }
+@media (max-width: 700px) { .maprow { grid-template-columns: minmax(0, 1fr); } }
+.maplbl { font-family: var(--font-data); font-size: 0.82rem; font-weight: 600; color: var(--gpu); line-height: 1.3; }
+.maplbl small { font-family: var(--font-body); font-weight: 400; color: var(--muted); font-size: 0.78rem; }
+.lanes { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-end; min-width: 0; }
+.lane { width: 26px; display: flex; flex-direction: column-reverse; gap: 2px; padding: 3px; border: 1px solid var(--rule); border-radius: 5px; min-height: 22px; background: var(--paper); }
+.lane.grp { width: calc(var(--g) * 22px); flex-direction: row; align-items: flex-end; }
+.lane.idle { opacity: 0.5; }
+.lane .w { display: block; width: 100%; height: calc(var(--n) * 9px); background: var(--gpu); border-radius: 2px; }
+.lane.grp .w { height: 9px; }
+.mapnote { grid-column: 2; font-size: 0.9rem; color: var(--muted); }
+@media (max-width: 700px) { .mapnote { grid-column: 1; } }
+.chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .chips { grid-template-columns: minmax(0, 1fr); } }
+.chip-box { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 16px; display: grid; gap: 12px; align-content: start; }
+.chip-title { font-family: var(--font-data); font-size: 0.78rem; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; }
+.cpu-cores { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pcore, .ecore { border-radius: 8px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; color: var(--surface); }
+.pcore { background: var(--cpu); height: 54px; }
+.ecore { background: color-mix(in srgb, var(--cpu) 60%, var(--surface)); height: 38px; }
+.gpu-cores { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.gpu-cores .gc { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1.5px; padding: 3px; border: 1px solid var(--rule); border-radius: 5px; }
+.gpu-cores .gc i { aspect-ratio: 1; background: var(--gpu); border-radius: 1px; opacity: 0.85; }
+.nest { overflow-x: auto; }
+.nest-grid, .nest-tg, .nest-sg { border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
+.nest-grid { border: 1.5px dashed var(--muted); min-width: 520px; }
+.nest-tg { border: 1.5px solid var(--cpu); background: var(--cpu-soft); }
+.nest-sg { border: 1.5px solid var(--gpu); background: var(--gpu-soft); }
+.nest-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nest-lbl { font-family: var(--font-data); font-size: 0.74rem; color: var(--ink); }
+.lanes32 { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; }
+.lanes32 i { aspect-ratio: 1; background: var(--gpu); border-radius: 2px; }
+.memstack { display: grid; gap: 6px; justify-items: center; }
+.mem { width: var(--w); min-width: 220px; max-width: 100%; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 14px; border-radius: 8px; background: color-mix(in srgb, var(--gpu) calc(100% - var(--w)), var(--cpu-soft)); color: var(--ink); border: 1px solid var(--rule); font-size: 0.88rem; }
+.mem span { font-family: var(--font-data); font-size: 0.74rem; color: var(--muted); }
+.mem:first-child, .mem:nth-child(2) { color: var(--surface); }
+.mem:first-child span, .mem:nth-child(2) span { color: color-mix(in srgb, var(--surface) 80%, transparent); }
+.coal { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; overflow-x: auto; }
+.coal-row { display: grid; grid-template-columns: 90px minmax(260px, 1fr) 120px; gap: 12px; align-items: center; }
+.coal-lbl, .coal-res { font-family: var(--font-data); font-size: 0.78rem; color: var(--muted); }
+.coal-lanes { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; }
+.coal-lanes i { height: 18px; background: var(--cpu); border-radius: 2px; }
+.coal-lanes.scattered i { background: var(--gpu); }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.flow .step { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; flex: 1 1 160px; }
+.flow .arrow { color: var(--gpu); font-weight: 700; }
+dl.gloss { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+@media (max-width: 760px) { dl.gloss { grid-template-columns: minmax(0, 1fr); } }
+dl.gloss div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+dl.gloss dt { font-weight: 600; font-size: 0.9rem; }
+dl.gloss dd { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.part-banner { display: flex; align-items: center; gap: 14px; }
 </style>
 </head>
 <body>
@@ -171,8 +294,17 @@ ol.refs { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; max-width: 80
   <aside class="rail" aria-label="Contents">
     <nav id="toc">
       <a href="#overview">Overview</a>
+      <a href="#sim">Live simulation</a>
       <a href="#problem">Problem</a>
-      <a href="#explainer">How it works</a>
+      <a href="#bg-graphs">Background</a>
+      <a class="sub" href="#bg-graphs">Graphs</a>
+      <a class="sub" href="#bg-bfs">BFS in depth</a>
+      <a class="sub" href="#bg-gpu">GPU programming</a>
+      <a class="sub" href="#bg-cpu">CPU parallelism</a>
+      <a class="sub" href="#bg-pr">PageRank in depth</a>
+      <a class="sub" href="#bg-locality">Locality</a>
+      <a class="sub" href="#bg-measure">Measuring</a>
+      <a class="sub" href="#glossary">Glossary</a>
       <a href="#setup">Machine &amp; data</a>
       <a href="#approach">Approach</a>
       <a href="#results">Results</a>
@@ -195,6 +327,7 @@ ol.refs { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; max-width: 80
   <main>
     <!-- ======================= HERO ======================= -->
     <section class="hero" id="overview">
+      <canvas id="hero-net" aria-hidden="true"></canvas>
       <span class="eyebrow">Systems project · Apple M2 · Metal compute shaders</span>
       <h1>Breadth-first search and PageRank on the <span class="gpu">M2 GPU</span></h1>
       <p class="lede">Two of the most common graph algorithms, written from scratch as Metal kernels for an 8&nbsp;GB MacBook, measured against OpenMP CPU code and the GAP Benchmark Suite on six real graphs with up to 234&nbsp;million edges. Every GPU answer is checked against a CPU reference.</p>
@@ -205,6 +338,70 @@ ol.refs { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; max-width: 80
         <div class="tile"><span class="big num">0</span><span class="lbl">mismatches: every GPU BFS distance equals the CPU reference exactly</span></div>
       </div>
       <div class="byline"><span>14 phases, each validated and committed</span><span>25 automated test groups</span><span>45/45 NetworkX cross-checks</span></div>
+    </section>
+
+    <!-- ======================= LIVE SIMULATION ======================= -->
+    <section id="sim">
+      <header><span class="eyebrow">Live simulation</span><h2>Watch the M2 search a graph</h2></header>
+      <p class="lead">This is the whole system in motion. A breadth-first search spreads through a graph one level at a time, and each level is sent to the GPU or the CPU. The chip panel shows how much of the hardware each level actually keeps busy, and the clock runs on a cost model calibrated to this project's measurements.</p>
+      <div class="stage" id="stage">
+        <div class="stage-bar">
+          <div class="seg" role="group" aria-label="Graph">
+            <span class="seg-lbl">Graph</span>
+            <button type="button" class="seg-btn on" data-graph="social">Social network</button>
+            <button type="button" class="seg-btn" data-graph="road">Road network</button>
+          </div>
+          <div class="seg" role="group" aria-label="Strategy">
+            <span class="seg-lbl">Strategy</span>
+            <button type="button" class="seg-btn" data-mode="td">GPU top-down</button>
+            <button type="button" class="seg-btn" data-mode="do">GPU direction-optimizing</button>
+            <button type="button" class="seg-btn on" data-mode="hybrid">Hybrid CPU + GPU</button>
+          </div>
+        </div>
+        <div class="stage-main">
+          <div class="stage-canvas-wrap">
+            <canvas id="sim-canvas" aria-label="Animated graph: vertices light up level by level as the search reaches them"></canvas>
+            <div class="stage-overlay" id="sim-overlay">Level 0</div>
+          </div>
+          <div class="stage-side">
+            <div class="stat-grid">
+              <div class="stat"><span class="k">Level</span><span class="v" id="st-level">0</span></div>
+              <div class="stat"><span class="k">Frontier</span><span class="v" id="st-frontier">1</span></div>
+              <div class="stat"><span class="k">Direction</span><span class="v" id="st-dir">–</span></div>
+              <div class="stat"><span class="k">Runs on</span><span class="v" id="st-dev">–</span></div>
+              <div class="stat wide"><span class="k">Edges examined this level (real-graph scale)</span><span class="v" id="st-work">–</span></div>
+            </div>
+            <div class="chipview">
+              <div class="chip-head"><span>GPU · 10 cores × 32 lanes</span><span id="st-gpu-util">idle</span></div>
+              <div class="gpu-lanes" id="gpu-lanes"></div>
+              <div class="chip-head"><span>CPU · 4 performance + 4 efficiency cores</span><span id="st-cpu-util">idle</span></div>
+              <div class="cpu-lanes" id="cpu-lanes"></div>
+            </div>
+            <div class="clock"><span class="k">Modelled time so far</span><span class="v" id="st-clock">0.00 ms</span></div>
+          </div>
+        </div>
+        <div class="stage-bottom">
+          <div class="timeline-wrap">
+            <div class="chip-head"><span>Levels: bar height = work, colour = device</span><span class="key"><i class="kg"></i> GPU <i class="kc"></i> CPU</span></div>
+            <div class="timeline" id="sim-timeline" aria-label="One bar per completed level"></div>
+          </div>
+          <div class="totals" id="sim-totals" aria-label="Total time per strategy"></div>
+        </div>
+        <div class="stage-ctl">
+          <button type="button" id="sim-play">Play</button>
+          <button type="button" id="sim-step" class="ghost">Step one level</button>
+          <button type="button" id="sim-restart" class="ghost">Restart</button>
+          <label for="sim-speed" class="speed">Speed <input type="range" id="sim-speed" min="0.5" max="3" step="0.25" value="1.25"></label>
+        </div>
+      </div>
+      <div class="cols">
+        <div class="card"><h4>What to look for</h4><ul class="clean">
+          <li><b>Social network, GPU top-down:</b> the frontier explodes in the middle levels and the GPU lights up fully, but it examines every edge.</li>
+          <li><b>Direction-optimizing:</b> the big levels flip to bottom-up (cyan pulses run from unvisited vertices to the frontier) and the time drops about 3.5×.</li>
+          <li><b>Road network:</b> the frontier never grows; most GPU lanes stay dark while every level still pays the fixed round trip. The hybrid moves those levels to the CPU and is 5× faster.</li>
+        </ul></div>
+        <div class="card"><h4>How the clock works</h4><p>Each simulated level stands for one or more real levels of LiveJournal (14 levels, 86M edge entries) or roadNet-CA (~600 levels, 5.5M). A GPU level costs 0.18&nbsp;ms plus 0.4&nbsp;ns per top-down edge or 0.12&nbsp;ns per bottom-up edge; a CPU level costs 22&nbsp;µs plus 1.6&nbsp;ns per edge. These constants come from the measured runs, and the totals land within a few percent of the real results shown beside them, except the hybrid on the social graph (10.4 modelled vs 8.8 ms measured), where the toy graph has fewer tiny levels than the real one.</p></div>
+      </div>
     </section>
 
     <!-- ======================= PROBLEM ======================= -->
@@ -228,24 +425,93 @@ ol.refs { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; max-width: 80
       </div>
     </section>
 
-    <!-- ======================= EXPLAINER ======================= -->
-    <section id="explainer">
-      <header><span class="eyebrow">Explanation</span><h2>How the pieces work</h2></header>
-      <p class="lead">This section explains every idea the results depend on, from how a graph is stored to why the update order of PageRank matters. The two interactive demos run in your browser.</p>
+    <!-- ======================= BACKGROUND: GRAPHS ======================= -->
+    <section id="bg-graphs">
+      <header><span class="eyebrow">Background · part 1</span><h2>Graphs, from the beginning</h2></header>
+      <p class="lead">A graph is a set of things (vertices) and connections between them (edges). People and friendships, web pages and links, road junctions and roads: all of these are graphs, and many questions about them come down to a few basic algorithms.</p>
+      <div class="cols">
+        <div class="card"><h4>Vertices, edges, degree</h4><p>A graph <i>G</i> = (<i>V</i>, <i>E</i>) has <i>n</i> vertices and <i>m</i> edges. In a <b>directed</b> graph an edge has a direction (page A links to page B); in an <b>undirected</b> graph it goes both ways (a friendship). The <b>degree</b> of a vertex is its number of edges; directed graphs distinguish <b>in-degree</b> and <b>out-degree</b>.</p></div>
+        <div class="card"><h4>Paths, distance, diameter</h4><p>A <b>path</b> is a sequence of edges. The <b>distance</b> between two vertices is the length of the shortest path, counted in hops. The <b>diameter</b> is the largest distance in the graph. A <b>connected component</b> is a group of vertices that can all reach each other.</p></div>
+      </div>
+      <h3>Two very different kinds of real graph</h3>
+      <div class="cols">
+        <div class="card">
+          <h4>Small-world, heavy-tailed <span class="tag gpu">social &amp; web</span></h4>
+          <p>Social networks and the web have a <b>small diameter</b>: almost everyone is within 5–10 hops of everyone else. Their degrees are <b>heavy-tailed</b> (roughly a power law): most vertices have a handful of edges, a few "hubs" have tens of thousands. In LiveJournal the average degree is 14 and the largest is 20,292.</p>
+        </div>
+        <div class="card">
+          <h4>Large-world, uniform <span class="tag cpu">road networks</span></h4>
+          <p>Road networks are nearly planar: every junction connects to 2–4 roads, and no vertex in roadNet-CA has more than 12. Going from one end of California to the other takes hundreds of hops, so the diameter is large (about 770).</p>
+        </div>
+      </div>
+      <p>These two shapes stress a GPU in opposite ways. Hubs create <b>load imbalance</b>, because one thread may get thousands of times more work than another. A large diameter creates <b>many tiny steps</b>, each with a fixed cost. Most results in this project trace back to one of these two properties.</p>
 
-      <h3>1. Storing a graph: CSR</h3>
-      <p>Graphs are stored in <b>compressed sparse row</b> (CSR) form: one array <code>col_idx</code> lists every vertex's neighbours back to back, and a second array <code>row_ptr</code> says where each vertex's list starts. Neighbours of vertex <i>v</i> are <code>col_idx[row_ptr[v] .. row_ptr[v+1]]</code>. It is compact (4 bytes per edge) and lets the GPU read a neighbour list as one contiguous run.</p>
+      <h3>Why BFS and PageRank</h3>
+      <div class="cols">
+        <div class="card"><h4>Breadth-first search</h4><p>Finds the hop distance from one vertex to all others. It answers "how far is everyone from me", finds connected components, and is the inner loop of many larger algorithms (betweenness centrality, maximum flow, community detection). It is also the kernel of the <b>Graph500</b> ranking of supercomputers.</p></div>
+        <div class="card"><h4>PageRank</h4><p>Scores every vertex by how likely a random walker is to be there. It was invented to rank web pages for Google and is used for recommendation, influence, citation analysis and fraud detection. It touches every edge in every iteration, so it is a pure test of memory bandwidth.</p></div>
+      </div>
+
+      <h3>Storing a graph in memory</h3>
+      <div class="cols">
+        <div class="card"><h4>Adjacency matrix: too big</h4><p>An <i>n</i>×<i>n</i> table with a 1 for every edge. For LiveJournal that is 4.8 million × 4.8 million cells, about 2.9 TB even at one bit per cell, while 99.9997% of the cells are zero.</p></div>
+        <div class="card"><h4>Compressed sparse row (CSR): what we use</h4><p>Store only the edges. <code>col_idx</code> lists every vertex's neighbours back to back; <code>row_ptr</code> says where each list starts. That is 4 bytes per edge plus 4 per vertex: LiveJournal fits in 280 MB, Orkut in 906 MB.</p></div>
+      </div>
       <div class="formula">vertex:      0      1         2      3
 row_ptr:   [ 0,     2,        5,     6,     8 ]
-col_idx:   [ 1, 2,  0, 2, 3,  0,     1, 2 ]     neighbours of 1 = col_idx[2..5] = {0, 2, 3}</div>
+col_idx:   [ 1, 2,  0, 2, 3,  0,     1, 2 ]
 
-      <h3>2. Breadth-first search, top-down and bottom-up</h3>
-      <p>BFS finds every vertex's distance (in hops) from a source. It works in <b>levels</b>: the <b>frontier</b> is the set of vertices found in the last level, and the next level is every unvisited neighbour of the frontier.</p>
+neighbours of vertex 1 = col_idx[ row_ptr[1] .. row_ptr[2] ) = col_idx[2..5) = {0, 2, 3}
+degree of vertex 1     = row_ptr[2] − row_ptr[1] = 3</div>
+      <p>Two derived versions are built when a graph is loaded. BFS treats every graph as undirected, so directed edges are <b>symmetrized</b> (each edge stored both ways). Pull-style PageRank needs each vertex's <i>incoming</i> edges, so it uses the <b>transpose</b> of the directed graph. Datasets arrive as text edge lists from SNAP; a converter turns them into binary CSR in two streaming passes, so even the 234-million-edge Orkut file converts within the 8 GB of RAM.</p>
+    </section>
+
+    <!-- ======================= BFS IN DEPTH ======================= -->
+    <section id="bg-bfs">
+      <header><span class="eyebrow">Background · part 2</span><h2>Breadth-first search in depth</h2></header>
+
+      <h3>The serial algorithm</h3>
+      <p>The textbook BFS keeps a <b>queue</b>. It removes a vertex, looks at its neighbours, and appends every neighbour it has not seen before. Each vertex enters the queue once and each edge is looked at once (twice for undirected graphs), so the cost is <b>O(<i>n</i> + <i>m</i>)</b>. This is our correctness reference, <code>cpu_serial</code>.</p>
+      <div class="formula">dist[all] = ∞;  dist[source] = 0;  queue = [source]
+while queue not empty:
+    v = queue.pop_front()
+    for u in neighbours(v):
+        if dist[u] == ∞:
+            dist[u] = dist[v] + 1
+            queue.push_back(u)</div>
+
+      <h3>Levels and the frontier</h3>
+      <p>The queue naturally holds vertices in order of distance. Grouping them gives <b>levels</b>: level 0 is the source, level 1 its neighbours, level 2 their unvisited neighbours, and so on. The vertices of the current level are the <b>frontier</b>. A parallel BFS processes one whole level at a time; this is called <b>level-synchronous</b> BFS:</p>
+      <div class="formula">frontier = [source];  level = 0
+while frontier not empty:
+    next = []
+    in parallel for v in frontier:            ← thousands of threads at once
+        for u in neighbours(v):
+            if dist[u] == ∞ and claim(u):      ← only one thread may win u
+                dist[u] = level + 1
+                append u to next
+    barrier                                    ← everyone finishes the level
+    frontier = next;  level += 1</div>
+      <p>The barrier at the end of each level is unavoidable: level <i>k</i>+1 depends on the whole of level <i>k</i>. On the GPU each barrier is a full round trip to the CPU, which is why the road network (≈600 levels) is hard.</p>
+
+      <h3>Race conditions and atomics</h3>
       <div class="cols">
-        <div class="card"><h4>Top-down <span class="tag gpu">push</span></h4><p>Each frontier vertex scans its neighbours and claims the unvisited ones. Work is proportional to the edges leaving the frontier, which is efficient while the frontier is small.</p></div>
-        <div class="card"><h4>Bottom-up <span class="tag cpu">pull</span></h4><p>Each <i>unvisited</i> vertex scans its neighbours and stops at the first one in the frontier. When the frontier covers half the graph, most scans stop after one or two neighbours, so far fewer edges are touched.</p></div>
+        <div class="card"><h4>The problem</h4><p>Two frontier vertices can share an unvisited neighbour <i>u</i>. Their threads both see <code>dist[u] == ∞</code> at the same moment, both write it, and both append <i>u</i> to the next frontier. <i>u</i> is now processed twice, and on high-degree graphs the duplicates multiply.</p></div>
+        <div class="card"><h4>The fix: compare-and-swap</h4><p>An <b>atomic compare-and-swap</b> (CAS) changes <code>dist[u]</code> from ∞ to <i>level</i>+1 only if it is still ∞, and tells the thread whether it succeeded. Exactly one thread wins. Metal only provides a "weak" CAS that may fail spuriously, so the kernel retries in a loop. A <b>benign race</b> is the exception: in <code>gpu_vertex</code> every racing thread writes the same value, so no atomic is needed.</p></div>
       </div>
-      <p><b>Direction-optimizing BFS</b> (Beamer et al., SC'12) switches between the two per level using two thresholds, α = 15 and β = 18, the values the GAP suite uses. Social networks reach most of the graph within 5–6 levels, so the switch saves a lot. Try it on the toy graph below: step through the levels and compare how many edges each direction would examine.</p>
+
+      <h3>Two ways to store the frontier</h3>
+      <div class="cols">
+        <div class="card"><h4>Queue (sparse list)</h4><p>A list of vertex ids. Appending needs an atomic counter, which thousands of threads would fight over. Our kernels <b>aggregate</b>: the 32 lanes of a simdgroup count their new vertices, compute their offsets with one prefix sum, and a single lane performs one atomic add for all 32.</p></div>
+        <div class="card"><h4>Bitmap (dense)</h4><p>One bit per vertex: 1 if it is in the frontier. LiveJournal's bitmap is 4.8 million bits = 600 KB, small enough to stay in the GPU's cache. Checking "is my neighbour in the frontier?" becomes a cheap cached read. The 32 lanes of a simdgroup cover exactly one 32-bit word, so they build it with one <code>simd_or</code> and no atomics.</p></div>
+      </div>
+
+      <h3>Top-down and bottom-up</h3>
+      <div class="cols">
+        <div class="card"><h4>Top-down <span class="tag gpu">push</span></h4><p>Each frontier vertex scans its neighbours and claims the unvisited ones. Work ≈ the edges leaving the frontier. Efficient while the frontier is small.</p></div>
+        <div class="card"><h4>Bottom-up <span class="tag cpu">pull</span></h4><p>Each <i>unvisited</i> vertex scans its neighbours and stops at the first one in the frontier. When the frontier covers half the graph, most scans stop after one or two neighbours. No atomics are needed, because each vertex only writes its own distance.</p></div>
+      </div>
+      <p><b>Direction-optimizing BFS</b> (Beamer, Asanović and Patterson, SC'12) picks per level. With <i>m<sub>f</sub></i> = edges leaving the frontier and <i>m<sub>u</sub></i> = edges of still-unvisited vertices, it switches to bottom-up when <i>m<sub>f</sub></i> &gt; <i>m<sub>u</sub></i>/α, and back to top-down when the frontier shrinks below <i>n</i>/β vertices. We use the GAP suite's α = 15 and β = 18, and the unit tests check that the GPU makes the same choice as the CPU at every level. Step through the toy graph below and compare the two costs per level:</p>
 
       <div class="demo" id="bfs-demo">
         <div class="demo-grid">
@@ -269,36 +535,173 @@ col_idx:   [ 1, 2,  0, 2, 3,  0,     1, 2 ]     neighbours of 1 = col_idx[2..5] 
                 <tbody id="bfs-rows"></tbody>
               </table>
             </div>
-            <p class="readout">Top-down counts every edge leaving the frontier. Bottom-up counts the neighbours each unvisited vertex checks before it finds one in the frontier. The direction rule picks the cheaper one, as GAP's α/β rule does on real graphs.</p>
+            <p class="readout">Top-down counts every edge leaving the frontier. Bottom-up counts the neighbours each unvisited vertex checks before it finds one in the frontier.</p>
+          </div>
+        </div>
+      </div>
+      <p>On LiveJournal the effect is large: the three biggest levels examine 17 million adjacency entries bottom-up instead of 82 million top-down.</p>
+
+      <h3>Giving every thread a fair share: load balancing</h3>
+      <p>Suppose the frontier holds four vertices with degrees 3, 1, 5 and 2 (11 edges in total). There are several ways to hand this work to GPU threads, and they are exactly the variants this project compares:</p>
+      <div class="mapping">
+        <div class="maprow"><span class="maplbl">gpu_naive<br><small>thread per frontier vertex</small></span>
+          <div class="lanes"><span class="lane"><i class="w" style="--n:3"></i></span><span class="lane"><i class="w" style="--n:1"></i></span><span class="lane"><i class="w" style="--n:5"></i></span><span class="lane"><i class="w" style="--n:2"></i></span></div>
+          <span class="mapnote">Thread 3 does 5 edges while thread 2 does 1. With a 20,000-degree hub, one thread works 20,000× longer and its 31 simdgroup neighbours wait.</span></div>
+        <div class="maprow"><span class="maplbl">gpu_vertex<br><small>thread per vertex, every level</small></span>
+          <div class="lanes"><span class="lane idle"></span><span class="lane"><i class="w" style="--n:3"></i></span><span class="lane idle"></span><span class="lane idle"></span><span class="lane"><i class="w" style="--n:1"></i></span><span class="lane idle"></span><span class="lane"><i class="w" style="--n:5"></i></span><span class="lane idle"></span><span class="lane"><i class="w" style="--n:2"></i></span></div>
+          <span class="mapnote">No queue at all: every vertex gets a thread and checks whether it is in the frontier. Simple, but most threads have nothing to do, and on a 600-level graph all <i>n</i> threads launch 600 times.</span></div>
+        <div class="maprow"><span class="maplbl">gpu_binned<br><small>degree bins</small></span>
+          <div class="lanes"><span class="lane grp" style="--g:3"><i class="w" style="--n:1"></i><i class="w" style="--n:1"></i><i class="w" style="--n:1"></i></span><span class="lane"><i class="w" style="--n:1"></i></span><span class="lane grp" style="--g:5"><i class="w" style="--n:1"></i><i class="w" style="--n:1"></i><i class="w" style="--n:1"></i><i class="w" style="--n:1"></i><i class="w" style="--n:1"></i></span><span class="lane grp" style="--g:2"><i class="w" style="--n:1"></i><i class="w" style="--n:1"></i></span></div>
+          <span class="mapnote">Vertices are sorted into small, medium and large bins. A simdgroup (32 lanes) shares one medium list; a whole threadgroup shares one hub's list. Big lists get many workers.</span></div>
+        <div class="maprow"><span class="maplbl">gpu_edge<br><small>fixed edges per thread</small></span>
+          <div class="lanes"><span class="lane"><i class="w" style="--n:2"></i></span><span class="lane"><i class="w" style="--n:2"></i></span><span class="lane"><i class="w" style="--n:2"></i></span><span class="lane"><i class="w" style="--n:2"></i></span><span class="lane"><i class="w" style="--n:2"></i></span><span class="lane"><i class="w" style="--n:1"></i></span></div>
+          <span class="mapnote">Every thread gets exactly 2 edges, whoever they belong to. Perfect balance, at the cost of a prefix sum and a small search (below).</span></div>
+      </div>
+      <p>How does a thread in <code>gpu_edge</code> know which edges are its own? An <b>exclusive prefix sum</b> (scan) of the frontier degrees gives each vertex's starting position in one long virtual list of edges:</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>frontier vertex</th><th>A</th><th>B</th><th>C</th><th>D</th><th>total</th></tr></thead>
+        <tbody>
+          <tr><td>degree</td><td>3</td><td>1</td><td>5</td><td>2</td><td>11</td></tr>
+          <tr><td>exclusive scan (start offset)</td><td>0</td><td>3</td><td>4</td><td>9</td><td></td></tr>
+          <tr><td class="txt">edges owned</td><td>0–2</td><td>3</td><td>4–8</td><td>9–10</td><td></td></tr>
+        </tbody>
+      </table></div>
+      <p>Thread <i>t</i> handles virtual edges 2<i>t</i> and 2<i>t</i>+1. Thread 2, for example, gets edges 4 and 5; a binary search in the offsets [0, 3, 4, 9] shows that both belong to vertex C. The scan itself runs on the GPU in three phases: each threadgroup scans its block, one group scans the block totals, and every block adds its offset back.</p>
+
+      <h3>The hybrid: using both processors</h3>
+      <p>Because the M2's CPU and GPU share memory, a BFS level can run on either one with no copying. The hybrid measures each level's work (edges to examine). Levels under a threshold <i>T</i> = 10<sup>5</sup> edges run on 4 CPU cores, directly on the GPU's buffers; bigger levels go to the GPU. A tiny level then costs 1–90 µs on the CPU instead of about 200 µs on the GPU. The threshold was predicted from the measured costs (≈0.2 ms per GPU level vs ≈2 ns per edge on the CPU), and a sweep confirmed it.</p>
+    </section>
+
+    <!-- ======================= GPU PROGRAMMING ======================= -->
+    <section id="bg-gpu">
+      <header><span class="eyebrow">Background · part 3</span><h2>GPU programming concepts</h2></header>
+
+      <h3>CPU and GPU are built for different jobs</h3>
+      <div class="chips">
+        <div class="chip-box">
+          <span class="chip-title">M2 CPU · 8 cores</span>
+          <div class="cpu-cores"><span class="pcore">P</span><span class="pcore">P</span><span class="pcore">P</span><span class="pcore">P</span><span class="ecore">E</span><span class="ecore">E</span><span class="ecore">E</span><span class="ecore">E</span></div>
+          <p>A few powerful cores with large caches, branch prediction and out-of-order execution. Built to finish <b>one task as quickly as possible</b> (low latency).</p>
+        </div>
+        <div class="chip-box">
+          <span class="chip-title">M2 GPU · 10 cores · 1,280 ALUs</span>
+          <div class="gpu-cores"></div>
+          <p>Many simple arithmetic lanes that run the same instruction together. Built to finish <b>a huge number of small tasks</b> per second (high throughput), and to hide slow memory by always having other work ready.</p>
+        </div>
+      </div>
+
+      <h3>Kernels and SIMT</h3>
+      <p>A GPU program is a <b>kernel</b>: one function that every thread runs, each with its own thread id. In BFS, thread <i>i</i> might handle frontier vertex <i>i</i>. The hardware runs threads in groups of 32 called <b>simdgroups</b> (NVIDIA calls them warps). The 32 lanes of a simdgroup execute the same instruction at the same time on different data. This model is called <b>SIMT</b>: single instruction, multiple threads.</p>
+      <div class="cols">
+        <div class="card"><h4>Divergence</h4><p>If lanes take different branches of an <code>if</code>, the simdgroup runs both branches one after the other, with the lanes that did not take a branch masked off. Loops are worse: a simdgroup keeps looping until its <i>slowest</i> lane finishes. That is why one hub in a simdgroup stalls the other 31 lanes.</p></div>
+        <div class="card"><h4>The thread hierarchy</h4><p>Threads form simdgroups of 32; simdgroups form <b>threadgroups</b> of up to 1,024 threads that can share 32 KB of fast on-chip <b>threadgroup memory</b> and synchronise with a barrier; threadgroups form the <b>grid</b> of one dispatch. Different threadgroups cannot wait for each other within a dispatch.</p></div>
+      </div>
+      <div class="nest" aria-label="Thread hierarchy diagram">
+        <div class="nest-grid"><span class="nest-lbl">grid: one dispatch, e.g. 4.8 million threads</span>
+          <div class="nest-tg"><span class="nest-lbl">threadgroup: up to 1,024 threads · 32 KB shared memory · barriers</span>
+            <div class="nest-row">
+              <div class="nest-sg"><span class="nest-lbl">simdgroup: 32 lanes in lockstep</span><div class="lanes32"></div></div>
+              <div class="nest-sg"><span class="nest-lbl">simdgroup</span><div class="lanes32"></div></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <h3>3. Measuring BFS: GTEPS</h3>
-      <p>Speed is reported as <b>TEPS</b>, traversed edges per second (Graph500 convention): the number of edges in the source's connected component divided by the time. The same numerator is used for every variant, so a bottom-up search that skips edges gets no extra credit. Results are the harmonic mean over 64 fixed random sources, with 5 timed runs each.</p>
+      <h3>Latency hiding and occupancy</h3>
+      <p>A read from main memory takes hundreds of nanoseconds, time for hundreds of arithmetic operations. A CPU tries to avoid the wait with caches and prediction. A GPU instead keeps many simdgroups resident on each core and switches to another one whenever a simdgroup waits for memory. This only works if there is <b>enough parallel work</b> in flight. A road-network BFS level with 2,000 frontier vertices cannot fill 10 cores, so the GPU sits mostly idle and its fixed per-level costs dominate.</p>
 
-      <h3>4. How the GPU runs a kernel</h3>
-      <p>A Metal kernel launches one thread per item. Threads run in groups of 32 called <b>simdgroups</b> that execute in lockstep; several simdgroups form a threadgroup, and the 10 GPU cores run many threadgroups at once. In practice the GPU processes a large dispatch in <b>waves</b> of tens of thousands of threads. Two design questions follow everywhere:</p>
-      <ul class="clean">
-        <li><b>Who does a hub's work?</b> One thread per vertex leaves 31 lanes idle while one lane walks a 20,000-entry list. The fixes are to let a whole simdgroup or threadgroup share a large list, or to give every thread the same number of edges (an exclusive scan of the degrees tells each thread which edges are its own).</li>
-        <li><b>When does the CPU have to wait?</b> After each BFS level the CPU must read how big the next frontier is. That commit-and-wait costs 111&nbsp;µs on its own, and about 0.2&nbsp;ms per level once setup is included.</li>
-      </ul>
+      <h3>The memory hierarchy</h3>
+      <div class="memstack">
+        <div class="mem" style="--w:24%"><b>Registers</b><span>per thread · fastest</span></div>
+        <div class="mem" style="--w:38%"><b>Threadgroup memory</b><span>32 KB per threadgroup · on-chip</span></div>
+        <div class="mem" style="--w:52%"><b>GPU caches (L1 per core, shared L2)</b><span>hardware-managed</span></div>
+        <div class="mem" style="--w:68%"><b>System-level cache</b><span>8 MB · shared by CPU and GPU</span></div>
+        <div class="mem" style="--w:100%"><b>Unified LPDDR5 memory</b><span>8 GB · 102.4 GB/s theoretical · 95.3 GB/s measured</span></div>
+      </div>
+      <p>Graphs of millions of vertices live in the bottom layer. Whether a kernel is fast depends on how often it can be served from the layers above.</p>
 
-      <h3>5. Unified memory and the hybrid BFS</h3>
-      <p>On the M2 the CPU and GPU share one pool of RAM, so the CPU can work directly on the GPU's buffers with no copy. The <b>hybrid</b> BFS uses this: a level whose work is below a threshold (10<sup>5</sup> edges) runs on 4 CPU cores in microseconds, and only the big levels go to the GPU. Small levels then cost about 1–90&nbsp;µs instead of 200&nbsp;µs.</p>
+      <h3>Coalescing and cache lines: why random reads hurt</h3>
+      <p>Memory is moved in <b>cache lines</b> of 64–128 bytes, never single values. When the 32 lanes of a simdgroup read 32 consecutive 4-byte values, the hardware fetches one or two lines: the access is <b>coalesced</b>. When they read 32 scattered addresses (for example the neighbours of 32 different vertices), it fetches up to 32 lines and uses 4 bytes of each.</p>
+      <div class="coal">
+        <div class="coal-row"><span class="coal-lbl">coalesced</span><div class="coal-lanes"></div><span class="coal-res">→ 1 line fetched</span></div>
+        <div class="coal-row"><span class="coal-lbl">scattered</span><div class="coal-lanes scattered"></div><span class="coal-res">→ up to 32 lines</span></div>
+      </div>
+      <p>We measured the effect directly: the GPU streams 95 GB/s sequentially, but random 4-byte reads from a table larger than the 8 MB cache run at only 0.28 billion per second, about 1 GB/s of useful data. Graph traversal is mostly random reads, so this number, not the GPU's arithmetic speed, is the real limit.</p>
 
-      <h3>6. PageRank, push and pull</h3>
-      <p>PageRank gives each vertex a score: the probability that a random surfer, who follows a random out-link with probability <i>d</i> = 0.85 and jumps to a random page otherwise, is on it. It is computed by repeating one update until the scores stop changing:</p>
-      <div class="formula">r_new[v] = (1 − d)/n  +  d · ( Σ over in-neighbours u of  r[u] / outdeg[u]   +   dangling / n )
+      <h3>Atomics</h3>
+      <p>An <b>atomic</b> operation (add, compare-and-swap, max) reads, modifies and writes one memory location as one indivisible step, so concurrent threads cannot corrupt each other's updates. Atomics on the same address are serialised, so hubs become hot spots. Metal's device atomics only guarantee "relaxed" ordering: each operation is indivisible, but there is no ordering between different addresses. Every kernel here was designed so it needs nothing stronger. Atomic additions of floating-point numbers also happen in an unpredictable order, so their rounding differs from run to run; PageRank had to account for that.</p>
 
-dangling = total score of vertices with no out-links (spread evenly over all vertices)</div>
+      <h3>Simdgroup operations</h3>
+      <p>Lanes of a simdgroup can exchange values directly, without going through memory. <code>simd_sum</code> adds a value across all 32 lanes; <code>simd_prefix_exclusive_sum</code> gives each lane the sum of the lanes before it; <code>simd_ballot</code> and <code>simd_or</code> combine yes/no flags into a bit mask. This project uses them to append to queues with one atomic per simdgroup, to build frontier bitmaps without atomics, and to add up in-edges in the vector PageRank kernel.</p>
+
+      <h3>Parallel building blocks: reduction and scan</h3>
       <div class="cols">
-        <div class="card"><h4>Push <span class="tag gpu">atomics</span></h4><p>Each vertex adds its share to every out-neighbour. Many threads add to the same hub at once, so every edge becomes an atomic read-modify-write.</p></div>
-        <div class="card"><h4>Pull <span class="tag cpu">gathers</span></h4><p>Each vertex reads its in-neighbours' shares and sums them. One plain read per edge, one write per vertex, no atomics. This won on every graph.</p></div>
+        <div class="card"><h4>Reduction</h4><p>Combine <i>n</i> values into one (a sum, a maximum). Each threadgroup reduces its part with simdgroup operations and threadgroup memory, then one small second pass combines the partial results. Used for frontier sizes, PageRank's dangling mass and convergence checks.</p></div>
+        <div class="card"><h4>Exclusive scan (prefix sum)</h4><p>Turn [3, 1, 5, 2] into [0, 3, 4, 9]: each output is the sum of all inputs before it. It tells every thread where to write or which item it owns, and it underlies load balancing and stream compaction. Our scan was unit-tested on sizes 0, 1 and non-multiples of the threadgroup size.</p></div>
       </div>
 
-      <h3>7. Jacobi vs Gauss–Seidel, and why the GPU struggles with the second</h3>
-      <p>The standard update is <b>Jacobi</b>: every vertex reads last iteration's values, so the order does not matter and the GPU can update all vertices at once. <b>Gauss–Seidel</b> updates scores <b>in place</b>, so a vertex can already use the new values of vertices updated before it in the same sweep. The CPU code from GAP does this and needs about 40% fewer sweeps.</p>
+      <h3>How a Metal program runs</h3>
+      <div class="flow">
+        <span class="step">CPU encodes kernels into a <b>command buffer</b></span><span class="arrow">→</span>
+        <span class="step"><b>commit</b>: the buffer is queued to the GPU</span><span class="arrow">→</span>
+        <span class="step">GPU runs each <b>dispatch</b> (grid of threads)</span><span class="arrow">→</span>
+        <span class="step">CPU <b>waits</b>, then reads results in shared memory</span>
+      </div>
+      <ul class="clean">
+        <li><b>Pipelines.</b> Each kernel is compiled into a pipeline state object. Without Xcode there is no offline shader compiler, so this project compiles the Metal Shading Language source at program start and caches the pipelines.</li>
+        <li><b>Encoders and dispatches.</b> A compute encoder records dispatches in order. Dependent dispatches inside one command buffer cost about 0.6 µs each; a commit-and-wait round trip costs about 111 µs. BFS needs one round trip per level, because the CPU must read the next frontier's size.</li>
+        <li><b>Timing.</b> The GPU reports start and end timestamps for each command buffer (kernel time). Wall-clock time also includes the round trips; the results use wall-clock time as the headline, because that is what a user waits for.</li>
+      </ul>
+
+      <h3>Unified memory</h3>
+      <p>On a PC with a separate graphics card, data must be copied over PCIe (roughly 16–32 GB/s) before the GPU can use it. On Apple silicon the CPU and GPU use the same physical memory. Buffers created in <b>shared</b> storage mode are visible to both, so the CPU can read a BFS result, or even run the next level itself, with no copy. This is what makes the hybrid BFS possible.</p>
+
+      <h3>Memory-bound vs compute-bound</h3>
+      <p>The M2 GPU can do about 3.6 trillion floating-point operations per second but read only about 0.1 trillion bytes per second. A kernel needs roughly 36 operations per byte loaded to be limited by arithmetic. BFS does essentially no arithmetic per edge and PageRank does about one addition per 8 bytes, so both are <b>memory-bound</b>: their speed is set by how many bytes they move, and how randomly. That is why results are judged against bandwidth (the "roofline" idea), and why efficiency is reported as edges per second per GB/s.</p>
+    </section>
+
+    <!-- ======================= CPU PARALLELISM ======================= -->
+    <section id="bg-cpu">
+      <header><span class="eyebrow">Background · part 4</span><h2>Parallel programming on the CPU</h2></header>
+      <div class="cols">
+        <div class="card"><h4>OpenMP</h4><p>The CPU baselines use OpenMP: a <code>#pragma omp parallel for</code> splits a loop's iterations across threads. Starting and ending a parallel region (fork and join) costs about 20 µs, more than a whole small BFS level, so tiny levels run on a single thread.</p></div>
+        <div class="card"><h4>Scheduling</h4><p><b>Static</b> gives each thread an equal block of iterations up front. <b>Dynamic</b> hands out chunks of 64 as threads become free. <b>Guided</b> starts with big chunks and shrinks them. With skewed degrees, equal numbers of vertices are not equal work, so dynamic and guided win.</p></div>
+        <div class="card"><h4>Barriers and stragglers</h4><p>Every parallel loop ends with an implicit barrier: all threads wait for the slowest. A BFS on a road network is ~600 consecutive barriers, so its speed is set by the slowest core at every step.</p></div>
+        <div class="card"><h4>Performance and efficiency cores</h4><p>The M2 has 4 fast performance cores and 4 slower efficiency cores. Using all 8 helps when work is plentiful and balanced (LiveJournal), but on the road network the barriers wait for efficiency cores and 8 threads run slower than 4.</p></div>
+      </div>
+      <p>To avoid many threads fighting over one shared queue, each CPU thread collects newly found vertices in its own local buffer and copies them into the shared next frontier once per level.</p>
+    </section>
+
+    <!-- ======================= PAGERANK IN DEPTH ======================= -->
+    <section id="bg-pr">
+      <header><span class="eyebrow">Background · part 5</span><h2>PageRank in depth</h2></header>
+      <h3>The random surfer</h3>
+      <p>Imagine someone browsing the web forever. On each step, with probability <i>d</i> = 0.85 they click a random link on the current page; otherwise they get bored and jump to a random page. A page's PageRank is the fraction of time the surfer spends there in the long run. Pages linked from important pages become important themselves.</p>
+      <div class="formula">r_new[v] = (1 − d)/n  +  d · ( Σ over in-neighbours u of  r[u] / outdeg[u]   +   dangling / n )
+
+dangling = total score of vertices with no out-links, spread evenly over all vertices
+start: r[v] = 1/n for every v;  the scores always sum to 1</div>
+      <div class="cols">
+        <div class="card"><h4>Dangling vertices</h4><p>A page with no out-links would trap the surfer and leak score out of the system. Its score is instead spread evenly over all vertices each iteration, so the total stays exactly 1. Pokec has 200,110 such vertices.</p></div>
+        <div class="card"><h4>Power iteration and convergence</h4><p>Repeating the update converges to the answer, and the error shrinks by at least a factor of <i>d</i> = 0.85 per iteration. We stop when the total change between iterations (the L1 norm) falls below a tolerance, 10<sup>−6</sup> in the main experiments, which takes 44–62 iterations here. The speed benchmark runs exactly 20 iterations and reports time per iteration.</p></div>
+      </div>
+
+      <h3>Push and pull on the GPU</h3>
+      <div class="cols">
+        <div class="card"><h4>Push <span class="tag gpu">atomics</span></h4><p>Each vertex adds its share <code>r[u]/outdeg[u]</code> to each out-neighbour using atomic float additions. Every edge becomes a random atomic read-modify-write, and a hub's thousands of in-neighbours all hit the same address.</p></div>
+        <div class="card"><h4>Pull <span class="tag cpu">gathers</span></h4><p>Each vertex reads its in-neighbours' shares from the transposed graph and sums them: one plain random read per edge and one write per vertex. It was 1.5–4.9× faster than push on every graph.</p></div>
+      </div>
+      <p>The pull kernels differ in how threads map to vertices, exactly as in BFS. <b>Scalar</b> uses one thread per vertex: good for uniform low degrees, but hubs stall a simdgroup. <b>Vector</b> uses one simdgroup per vertex, with lanes striding the in-list and <code>simd_sum</code> combining: fast on skewed graphs, wasteful on degree-3 vertices. <b>Adaptive</b> sorts vertices into degree bins once and uses the right mapping for each bin.</p>
+
+      <h3>Floating-point precision</h3>
+      <p>Metal has no 64-bit doubles, so the GPU uses 32-bit floats, which carry about 7 significant digits. Adding 100,000 tiny equal values (about 10<sup>−5</sup>) into a running total near 0.46 loses the same low bits every time. On the 100,000-leaf star graph this pushed the error 10× past the allowed tolerance. Two techniques fixed it:</p>
+      <ul class="clean">
+        <li><b>Kahan summation</b> keeps a second variable holding the rounding error of each addition and feeds it back into the next one. It only works if the compiler does not "simplify" the algebra away, so all shaders are compiled with fast-math turned off.</li>
+        <li><b>Aggregated and compensated atomics</b> (push kernel): lanes that target the same vertex first add their values with <code>simd_sum</code> and issue a single atomic; when an atomic addition loses noticeable precision, its exact rounding error is computed and added to a second accumulator.</li>
+      </ul>
+
+      <h3>Jacobi vs Gauss–Seidel</h3>
+      <p>The standard update is <b>Jacobi</b>: every vertex reads last iteration's values, so the order does not matter and the GPU can update all vertices at once. <b>Gauss–Seidel</b> updates scores <b>in place</b>, so a vertex can already use the new values of vertices updated before it in the same sweep. The GAP suite's CPU code does this and needs about 40% fewer sweeps.</p>
       <p>On a GPU, vertices in the same wave run at the same time and still read each other's <i>old</i> values. Most of the graph still speeds up, because later waves see earlier ones, but a tightly linked pair processed in the same wave converges only at Jacobi speed. The simulation below shows this on a 1,000-vertex graph that contains one such pair (two vertices that each link only to the other). Phase 13 moves one vertex of every such pair into a second, small pass so it always sees its partner's new value.</p>
 
       <div class="demo" id="pr-demo">
@@ -312,15 +715,77 @@ dangling = total score of vertices with no out-links (spread evenly over all ver
         <div class="tablewrap"><table><thead><tr><th>update scheme</th><th>rest of graph</th><th>the pair</th></tr></thead><tbody id="pr-read"></tbody></table></div>
         <p class="readout">Model: 1,000 vertices with mostly forward links plus random ones; GPU waves are 64 vertices; the pair's two ids are adjacent, so they share a wave. This toy has no dangling vertices, so it skips the renormalisation the real kernel needs.</p>
       </div>
+      <p>Two more ideas make the in-place version work. In-place updates do not keep the total at exactly 1, so the scores are <b>rescaled to sum 1</b> after every sweep. And because in-place sweeps make the change per sweep look smaller than the remaining error, the in-place and Jacobi versions are compared at <b>equal accuracy</b> against the exact answer, never at equal tolerance.</p>
+    </section>
 
-      <h3>8. Validation</h3>
-      <p>Speed numbers mean nothing if the answer is wrong, so every timed run is checked before it is recorded:</p>
+    <!-- ======================= LOCALITY ======================= -->
+    <section id="bg-locality">
+      <header><span class="eyebrow">Background · part 6</span><h2>Locality and vertex ordering</h2></header>
+      <p>A vertex's id decides where its data sits in memory. If neighbours have nearby ids, reading one brings the others into cache with the same cache line; if ids are random, almost every neighbour read is a cache miss. The same graph can therefore run 2–3× faster or slower depending only on how its vertices are numbered.</p>
+      <div class="cols">
+        <div class="card"><h4>Measuring locality</h4><p>Two numbers per ordering: the average id gap |<i>u</i> − <i>v</i>| over all edges, and the share of edges whose ends fall in the same block of 64 consecutive ids. roadNet-CA's original numbering keeps 61% of edges inside a block; web-Google's keeps 0.01%, which is no better than random.</p></div>
+        <div class="card"><h4>The orderings tested</h4><ul class="clean"><li><b>Original</b>: as the dataset was published.</li><li><b>Random</b>: the worst case, a baseline.</li><li><b>Degree</b>: hubs first.</li><li><b>Reverse Cuthill–McKee (RCM)</b>: a BFS from a peripheral vertex that visits low-degree neighbours first, then reversed. It keeps neighbours close together.</li></ul></div>
+      </div>
+      <p>The orderings interact with algorithms in different ways. RCM helps PageRank because every gather becomes more local. It hurts bottom-up BFS, because bottom-up stops at the first neighbour that is in the frontier, and RCM puts the vertices that are found last at the start of every neighbour list.</p>
+    </section>
+
+    <!-- ======================= MEASUREMENT ======================= -->
+    <section id="bg-measure">
+      <header><span class="eyebrow">Background · part 7</span><h2>Measuring and validating</h2></header>
+      <div class="cols">
+        <div class="card"><h4>TEPS and GTEPS</h4><p>Traversed edges per second (Graph500 convention): the number of edges in the source's connected component divided by the BFS time. GTEPS is billions of TEPS. The same numerator is used for every variant, so a bottom-up search that skips edges gets no extra credit.</p></div>
+        <div class="card"><h4>Averaging over sources</h4><p>Each graph uses 64 random sources with a fixed seed, the same for every variant. Each source gets one warm-up run and 5 timed runs; the median is kept. Throughput across sources is a <b>harmonic mean</b>, the correct average for rates, so a few fast sources cannot hide slow ones.</p></div>
+        <div class="card"><h4>Fair conditions</h4><p>All benchmarks ran on AC power, Low Power Mode off, other apps closed. A run on battery made the CPU about 17% slower, so those numbers were re-measured. Every result row records the code version that produced it.</p></div>
+        <div class="card"><h4>Bandwidth efficiency</h4><p>A kernel's bytes moved divided by its time, compared with the measured 95.3 GB/s. For BFS the result is also expressed as millions of edges per second per GB/s of bandwidth, so a laptop can be compared fairly with data-centre GPUs that have 10–30× more bandwidth.</p></div>
+      </div>
+      <h3>Validation: speed only counts if the answer is right</h3>
       <ul class="clean">
-        <li><b>BFS:</b> every vertex's distance must equal the serial CPU reference exactly, for all 64 sources.</li>
-        <li><b>PageRank:</b> the GPU uses 32-bit floats (Metal has no doubles), so it must be within L1 error 10<sup>−4</sup> of a double-precision reference, with relative error under 10<sup>−3</sup> on the top 1,000 vertices and scores summing to 1.</li>
-        <li><b>The references themselves</b> were checked against NetworkX (45 of 45 checks; worst PageRank difference 3·10<sup>−15</sup>).</li>
-        <li><b>Unit tests</b> run every variant on 8 synthetic graphs, including a 100,000-leaf star built to break load balancing and float accumulation. Deliberately broken versions of the kernels were used to confirm the tests catch them.</li>
+        <li><b>BFS:</b> every vertex's distance must equal the serial CPU reference exactly, for all 64 sources, before any timing is recorded.</li>
+        <li><b>PageRank:</b> within L1 error 10<sup>−4</sup> of a double-precision reference, relative error under 10<sup>−3</sup> on the top 1,000 vertices, and scores summing to 1.</li>
+        <li><b>The references themselves</b> were checked against the NetworkX library (45 of 45 checks; worst PageRank difference 3·10<sup>−15</sup>).</li>
+        <li><b>Unit tests</b> run every variant on 8 synthetic graphs: a path, a 100,000-leaf star, a complete graph, a grid, random R-MAT graphs, two components and an empty graph, at several threadgroup sizes.</li>
+        <li><b>Mutation checks:</b> deliberately broken versions of kernels (a wrong bit position, a missing term, a skipped reset) were run to confirm the tests catch each one.</li>
       </ul>
+    </section>
+
+    <!-- ======================= GLOSSARY ======================= -->
+    <section id="glossary">
+      <header><span class="eyebrow">Background · part 8</span><h2>Glossary</h2></header>
+      <dl class="gloss">
+        <div><dt>Adjacency list</dt><dd>For each vertex, the list of its neighbours.</dd></div>
+        <div><dt>Atomic operation</dt><dd>A read-modify-write that no other thread can interrupt.</dd></div>
+        <div><dt>Barrier</dt><dd>A point every thread must reach before any continues.</dd></div>
+        <div><dt>Bitmap frontier</dt><dd>One bit per vertex marking frontier membership.</dd></div>
+        <div><dt>Bottom-up step</dt><dd>Unvisited vertices search for a parent in the frontier.</dd></div>
+        <div><dt>Cache line</dt><dd>The 64–128-byte unit memory is moved in.</dd></div>
+        <div><dt>Coalesced access</dt><dd>Neighbouring lanes reading neighbouring addresses, served by few cache lines.</dd></div>
+        <div><dt>Command buffer</dt><dd>A batch of GPU work the CPU submits at once.</dd></div>
+        <div><dt>CSR</dt><dd>Compressed sparse row: neighbour lists packed into one array plus offsets.</dd></div>
+        <div><dt>Dangling vertex</dt><dd>A vertex with no out-links.</dd></div>
+        <div><dt>Diameter</dt><dd>The longest shortest-path distance in a graph.</dd></div>
+        <div><dt>Direction-optimizing BFS</dt><dd>BFS that chooses top-down or bottom-up per level.</dd></div>
+        <div><dt>Dispatch</dt><dd>One launch of a kernel over a grid of threads.</dd></div>
+        <div><dt>Divergence</dt><dd>Lanes of one simdgroup taking different paths, which serialises them.</dd></div>
+        <div><dt>Frontier</dt><dd>The vertices discovered in the most recent BFS level.</dd></div>
+        <div><dt>Gauss–Seidel</dt><dd>Iterative update that uses new values as soon as they exist.</dd></div>
+        <div><dt>GTEPS</dt><dd>Billions of traversed edges per second.</dd></div>
+        <div><dt>Harmonic mean</dt><dd>The average used for rates: <i>n</i> divided by the sum of reciprocals.</dd></div>
+        <div><dt>Jacobi iteration</dt><dd>Iterative update where every vertex reads only last iteration's values.</dd></div>
+        <div><dt>Kahan summation</dt><dd>Summation that carries each addition's rounding error forward.</dd></div>
+        <div><dt>Kernel</dt><dd>A function run by every GPU thread.</dd></div>
+        <div><dt>L1 norm</dt><dd>The sum of absolute differences between two vectors.</dd></div>
+        <div><dt>Latency hiding</dt><dd>Switching to other threads while some wait for memory.</dd></div>
+        <div><dt>Load imbalance</dt><dd>Some threads getting far more work than others.</dd></div>
+        <div><dt>Memory-bound</dt><dd>Limited by bytes moved rather than arithmetic.</dd></div>
+        <div><dt>OpenMP</dt><dd>A standard for parallel loops on multi-core CPUs.</dd></div>
+        <div><dt>Prefix sum (scan)</dt><dd>Each output is the sum of all inputs before it.</dd></div>
+        <div><dt>Simdgroup</dt><dd>32 GPU threads that execute in lockstep (a "warp").</dd></div>
+        <div><dt>Threadgroup</dt><dd>Up to 1,024 threads sharing on-chip memory and barriers.</dd></div>
+        <div><dt>Top-down step</dt><dd>Frontier vertices claim their unvisited neighbours.</dd></div>
+        <div><dt>Transpose</dt><dd>The graph with every edge reversed (incoming lists).</dd></div>
+        <div><dt>Unified memory</dt><dd>One physical memory shared by the CPU and the GPU.</dd></div>
+        <div><dt>Wave</dt><dd>The set of threads the GPU runs at the same moment.</dd></div>
+      </dl>
     </section>
 
     <!-- ======================= SETUP ======================= -->
@@ -864,6 +1329,360 @@ function simulate(sweeps = 60) {
   slider.addEventListener("input", render);
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", render);
   render();
+})();
+/* ---------------- static diagrams: fill repeated cells ---------------- */
+(() => {
+  const fill = (sel, count, wrap) => document.querySelectorAll(sel).forEach((n) => {
+    n.innerHTML = wrap ? Array.from({ length: wrap }, () => `<span class="gc">${"<i></i>".repeat(count)}</span>`).join("") : "<i></i>".repeat(count);
+  });
+  fill(".gpu-cores", 32, 10);
+  fill(".lanes32", 32);
+  fill(".coal-lanes", 32);
+})();
+
+/* ---------------- hero backdrop: drifting network ---------------- */
+(() => {
+  const cv = document.getElementById("hero-net");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let W = 0, H = 0, nodes = [], pulses = [], colA = "", colB = "";
+  const r = (() => { let s = 99; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); })();
+  function size() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!nodes.length) nodes = Array.from({ length: 64 }, () => ({ x: r() * W, y: r() * H, vx: (r() - 0.5) * 0.25, vy: (r() - 0.5) * 0.25 }));
+    colA = css("--gpu"); colB = css("--cpu");
+  }
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    const link = 120;
+    for (const n of nodes) {
+      if (!reduce) { n.x += n.vx; n.y += n.vy; if (n.x < 0 || n.x > W) n.vx *= -1; if (n.y < 0 || n.y > H) n.vy *= -1; }
+    }
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d < link) {
+        ctx.strokeStyle = colB; ctx.globalAlpha = 0.18 * (1 - d / link); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        if (!reduce && r() < 0.0009 && pulses.length < 14) pulses.push({ a, b, t: 0 });
+      }
+    }
+    ctx.globalAlpha = 0.7;
+    for (const n of nodes) { ctx.fillStyle = colB; ctx.beginPath(); ctx.arc(n.x, n.y, 2, 0, 7); ctx.fill(); }
+    pulses = pulses.filter((p) => p.t <= 1);
+    for (const p of pulses) {
+      p.t += 0.02;
+      const x = p.a.x + (p.b.x - p.a.x) * p.t, y = p.a.y + (p.b.y - p.a.y) * p.t;
+      ctx.globalAlpha = 0.9; ctx.fillStyle = colA; ctx.shadowColor = colA; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  size(); frame();
+  addEventListener("resize", () => { size(); if (reduce) frame(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", size);
+})();
+
+/* ---------------- live simulation ---------------- */
+(() => {
+// BFS simulation core: toy graphs, per-level BFS trace, device choice and a cost
+// model calibrated to the M2 measurements. Shared by the page (inlined) and tests.
+const SIM = (() => {
+  function rng(seed) { let s = seed >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); }
+  function social() {  // Barabasi-Albert preferential attachment: hubs + small diameter
+    const n = 380, m = 2, r = rng(11), adj = Array.from({ length: n }, () => new Set()), pool = [];
+    const link = (a, b) => { if (a !== b && !adj[a].has(b)) { adj[a].add(b); adj[b].add(a); pool.push(a, b); } };
+    link(0, 1); link(1, 2); link(0, 2);
+    for (let v = 3; v < n; v++) { let k = 0, guard = 0; while (k < m && guard++ < 50) { const u = pool[Math.floor(r() * pool.length)]; if (!adj[v].has(u)) { link(v, u); k++; } } }
+    const nb = adj.map((s) => [...s]);
+    // force-directed layout (Fruchterman-Reingold), deterministic
+    const pos = nb.map(() => [r(), r()]), k = Math.sqrt(1 / n);
+    let t = 0.1;
+    for (let it = 0; it < 160; it++) {
+      const disp = pos.map(() => [0, 0]);
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+        let dx = pos[i][0] - pos[j][0], dy = pos[i][1] - pos[j][1], d2 = dx * dx + dy * dy + 1e-9, f = (k * k) / d2;
+        disp[i][0] += dx * f; disp[i][1] += dy * f; disp[j][0] -= dx * f; disp[j][1] -= dy * f;
+      }
+      nb.forEach((ns, i) => ns.forEach((j) => { if (j > i) {
+        const dx = pos[i][0] - pos[j][0], dy = pos[i][1] - pos[j][1], d = Math.sqrt(dx * dx + dy * dy) + 1e-9, f = d / k;
+        disp[i][0] -= dx * f; disp[i][1] -= dy * f; disp[j][0] += dx * f; disp[j][1] += dy * f; } }));
+      for (let i = 0; i < n; i++) { const [dx, dy] = disp[i], d = Math.sqrt(dx * dx + dy * dy) + 1e-9, s = Math.min(d, t) / d; pos[i][0] += dx * s; pos[i][1] += dy * s; }
+      t *= 0.975;
+    }
+    let src = 0; for (let v = n - 1; v >= 0; v--) if (nb[v].length === 2) { src = v; break; }
+    return { name: "social", nb, pos: normalize(pos), src, real: { adj: 85.7e6, levels: 14 } };
+  }
+  function road() {  // jittered grid with a few missing streets: low degree, large diameter
+    // Columns >= CUT form a separate district the source cannot reach, like the
+    // real road graph's 2,637 other components: their unvisited edges keep the
+    // direction rule top-down, as on roadNet-CA (0 bottom-up levels of ~600).
+    const W = 40, H = 16, CUT = 20, r = rng(5), n = W * H, adj = Array.from({ length: n }, () => new Set());
+    const id = (x, y) => y * W + x;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (x + 1 < W && x + 1 !== CUT && r() > 0.08) { adj[id(x, y)].add(id(x + 1, y)); adj[id(x + 1, y)].add(id(x, y)); }
+      if (y + 1 < H && r() > 0.08) { adj[id(x, y)].add(id(x, y + 1)); adj[id(x, y + 1)].add(id(x, y)); }
+    }
+    const pos = []; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) pos.push([x + (r() - 0.5) * 0.45, y + (r() - 0.5) * 0.45]);
+    return { name: "road", nb: adj.map((s) => [...s]), pos: normalize(pos), src: id(0, Math.floor(H / 2)), real: { adj: 5.53e6, levels: 600 } };
+  }
+  function normalize(pos) {
+    const xs = pos.map((p) => p[0]), ys = pos.map((p) => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    return pos.map(([x, y]) => [(x - x0) / (x1 - x0 || 1), (y - y0) / (y1 - y0 || 1)]);
+  }
+  // Level-by-level trace with GAP's direction rule (alpha 15, beta 18).
+  function trace(g, mode) {
+    const n = g.nb.length, deg = g.nb.map((a) => a.length), dist = Array(n).fill(-1);
+    dist[g.src] = 0;
+    let frontier = [g.src], dir = "TD", prevNf = 0, levels = [];
+    while (frontier.length) {
+      const inF = new Set(frontier);
+      const mf = frontier.reduce((s, v) => s + deg[v], 0);
+      let mu = 0; for (let v = 0; v < n; v++) if (dist[v] < 0) mu += deg[v];
+      if (mode !== "td") {
+        if (dir === "TD" && mf > mu / 15) dir = "BU";
+        else if (dir === "BU" && frontier.length < n / 18 && frontier.length < prevNf) dir = "TD";
+      }
+      const next = [], edgesTo = [];
+      let examined = 0;
+      if (dir === "TD") {
+        examined = mf;
+        for (const v of frontier) for (const u of g.nb[v]) if (dist[u] < 0) { dist[u] = levels.length + 1; next.push(u); edgesTo.push([v, u]); }
+      } else {
+        for (let v = 0; v < n; v++) { if (dist[v] >= 0) continue; for (const u of g.nb[v]) { examined++; if (inF.has(u)) { next.push(v); edgesTo.push([u, v]); break; } } }
+        next.forEach((v) => (dist[v] = levels.length + 1));
+      }
+      levels.push({ frontier, dir, examined, edgesTo });
+      prevNf = frontier.length;
+      frontier = next;
+    }
+    // Scale to the real graph: per-level work by the ratio of average level work,
+    // and each simulated level stands for (real levels / simulated levels) real levels.
+    let reachedAdj = 0; for (let v = 0; v < n; v++) if (dist[v] >= 0) reachedAdj += deg[v];
+    const L = g.real.levels / levels.length;
+    const scale = (g.real.adj / g.real.levels) / (reachedAdj / levels.length);
+    let t = 0;
+    for (const lv of levels) {
+      lv.work = lv.examined * scale;
+      lv.device = mode === "hybrid" && lv.work < 1e5 ? "CPU" : "GPU";
+      lv.ms = levelMs(lv, L);
+      t += lv.ms; lv.cum = t;
+    }
+    return { levels, totalMs: t, dist };
+  }
+  // Costs per REAL level, from the M2 measurements: a GPU level costs a fixed
+  // ~0.18 ms (round trip + setup) plus a per-edge cost (top-down edges are random
+  // gathers; bottom-up edges mostly hit the cached bitmap); a CPU level on 4 cores
+  // costs ~22 us plus 1.6 ns per edge. Each simulated level stands for L real ones.
+  const COST = { gpuFixed: 0.18, gpuTD: 0.40e-6, gpuBU: 0.12e-6, cpuFixed: 0.022, cpuEdge: 1.6e-6 };
+  function levelMs(lv, L) {
+    if (lv.device === "CPU") return L * (COST.cpuFixed + lv.work * COST.cpuEdge);
+    return L * (COST.gpuFixed + lv.work * (lv.dir === "TD" ? COST.gpuTD : COST.gpuBU));
+  }
+  const MEASURED = { social: { td: 38.2, do: 10.7, hybrid: 8.76, graph: "soc-LiveJournal1" }, road: { td: 113, do: 113, hybrid: 22.0, graph: "roadNet-CA" } };
+  return { social, road, trace, MEASURED, COST };
+})();
+
+
+  const canvas = document.getElementById("sim-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const C = { gpu: "#ff8a4c", cpu: "#6eaaff", bu: "#4fe0d0", edge: "#2a3a4d", dim: "#2c3a4a", district: "#1d2834", ink: "#e8eef4" };
+  const graphs = { social: SIM.social(), road: SIM.road() };
+  let gName = "social", mode = "hybrid", g, tr, done, prog, playing = false, last = 0, dist, W = 0, H = 0, flashes = [];
+  const $ = (id) => document.getElementById(id);
+  const fmtWork = (x) => x >= 1e6 ? (x / 1e6).toFixed(1) + " M" : x >= 1e3 ? Math.round(x / 1e3) + " K" : String(Math.round(x));
+
+  // chip panel
+  const gpuEl = $("gpu-lanes"), cpuEl = $("cpu-lanes");
+  gpuEl.innerHTML = Array.from({ length: 10 }, () => `<span class="gcore">${"<i></i>".repeat(32)}</span>`).join("");
+  cpuEl.innerHTML = ["P", "P", "P", "P", "E", "E", "E", "E"].map((t) => `<span class="ccore ${t === "E" ? "e" : ""}">${t}</span>`).join("");
+  const lanes = [...gpuEl.querySelectorAll("i")], cores = [...cpuEl.querySelectorAll(".ccore")];
+  function setChips(lv) {
+    lanes.forEach((l) => l.classList.remove("on", "bu"));
+    cores.forEach((c) => c.classList.remove("on"));
+    if (!lv) { $("st-gpu-util").textContent = "idle"; $("st-cpu-util").textContent = "idle"; return; }
+    if (lv.device === "GPU") {
+      // threads this level would launch: 2 edges per thread top-down (gpu_edge),
+      // one thread per unvisited vertex bottom-up; spread round-robin over cores
+      const threads = lv.dir === "TD" ? Math.ceil(lv.examined / 2) : lv.unvisited;
+      const on = Math.min(320, threads);
+      for (let i = 0; i < on; i++) { const l = lanes[(i % 10) * 32 + Math.floor(i / 10)]; l.classList.add("on"); if (lv.dir === "BU") l.classList.add("bu"); }
+      $("st-gpu-util").textContent = `${Math.round((100 * on) / 320)}% of lanes busy`;
+      $("st-cpu-util").textContent = "waiting for the GPU";
+    } else {
+      cores.slice(0, 4).forEach((c) => c.classList.add("on"));
+      $("st-cpu-util").textContent = "4 threads";
+      $("st-gpu-util").textContent = "idle";
+    }
+  }
+
+  function layout(p) { const pad = 18; return [pad + p[0] * (W - 2 * pad), pad + p[1] * (H - 2 * pad)]; }
+  function resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = canvas.clientWidth; H = canvas.clientHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  function hueFor(level, total) { return 22 + (180 * level) / Math.max(1, total - 1); }
+
+  function reset() {
+    g = graphs[gName]; tr = SIM.trace(g, mode);
+    // unvisited count per level, for the lane display in bottom-up levels
+    const seen = new Set([g.src]);
+    tr.levels.forEach((lv) => { lv.unvisited = g.nb.length - seen.size; lv.edgesTo.forEach(([, v]) => seen.add(v)); });
+    done = 0; prog = 0; flashes = [];
+    dist = Array(g.nb.length).fill(-1); dist[g.src] = 0;
+    $("sim-timeline").innerHTML = "";
+    renderTotals(); updateStats(); setChips(null); draw();
+  }
+  function renderTotals() {
+    const names = { td: "GPU top-down", do: "GPU direction-optimizing", hybrid: "Hybrid CPU + GPU" };
+    const m = SIM.MEASURED[gName];
+    const totals = Object.fromEntries(Object.keys(names).map((k) => [k, SIM.trace(g, k).totalMs]));
+    const max = Math.max(...Object.values(totals));
+    $("sim-totals").innerHTML = `<div class="chip-head"><span>Total time, ${m.graph}</span><span>modelled · measured</span></div>` +
+      Object.keys(names).map((k) => `<div class="trow ${k === mode ? "on" : ""} ${k === "hybrid" ? "hy" : ""}"><div class="tl"><b>${names[k]}</b><span>${totals[k].toFixed(1)} ms · ${m[k]} ms</span></div><div class="track"><div class="fill" style="width:${(100 * totals[k]) / max}%"></div></div></div>`).join("");
+  }
+  function updateStats() {
+    const lv = tr.levels[done];
+    $("st-level").textContent = String(done);
+    $("sim-overlay").textContent = lv ? `Level ${done}` : `Done: ${tr.levels.length} levels`;
+    $("st-frontier").textContent = lv ? String(lv.frontier.length) : "0";
+    const dir = $("st-dir"), dev = $("st-dev");
+    dir.textContent = lv ? (lv.dir === "TD" ? "top-down" : "bottom-up") : "–";
+    dir.className = "v " + (lv && lv.dir === "BU" ? "bu" : "");
+    dev.textContent = lv ? lv.device : "–";
+    dev.className = "v " + (lv ? lv.device.toLowerCase() : "");
+    $("st-work").textContent = lv ? fmtWork(lv.work) + " edges" : "–";
+    const before = done > 0 ? tr.levels[done - 1].cum : 0;
+    const now = lv ? before + lv.ms * Math.min(1, prog) : tr.totalMs;
+    $("st-clock").textContent = now.toFixed(2) + " ms";
+  }
+  function finishLevel() {
+    const lv = tr.levels[done];
+    lv.edgesTo.forEach(([, v]) => { dist[v] = done + 1; flashes.push({ v, t: 1 }); });
+    const bar = document.createElement("div");
+    const h = Math.max(6, Math.min(100, ((Math.log10(Math.max(lv.work, 10)) - 2) / 6) * 100));
+    bar.className = "bar" + (lv.device === "CPU" ? " cpu" : lv.dir === "BU" ? " bu" : "");
+    bar.style.height = h + "%";
+    bar.title = `level ${done}: ${lv.dir === "TD" ? "top-down" : "bottom-up"} on ${lv.device}, ${fmtWork(lv.work)} edges, ${lv.ms.toFixed(2)} ms`;
+    $("sim-timeline").appendChild(bar);
+    done++; prog = 0;
+    setChips(tr.levels[done] || null);
+    updateStats();
+    if (done >= tr.levels.length) { playing = false; $("sim-play").textContent = "Play again"; }
+  }
+
+  function draw() {
+    if (!g || !W) return;
+    ctx.clearRect(0, 0, W, H);
+    const P = g.pos.map(layout);
+    const total = tr.levels.length;
+    const lv = tr.levels[done];
+    const front = new Set(lv ? lv.frontier : []);
+    // edges
+    ctx.lineWidth = gName === "road" ? 1.4 : 0.8;
+    ctx.strokeStyle = C.edge; ctx.globalAlpha = gName === "road" ? 0.8 : 0.45;
+    ctx.beginPath();
+    g.nb.forEach((ns, a) => ns.forEach((b) => { if (a < b) { ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); } }));
+    ctx.stroke();
+    // visited edges glow by level
+    ctx.globalAlpha = 0.55;
+    tr.levels.slice(0, done).forEach((l, k) => {
+      ctx.strokeStyle = `hsl(${hueFor(k, total)} 85% 60%)`;
+      ctx.beginPath(); l.edgesTo.forEach(([a, b]) => { ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); }); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+    // nodes
+    const rad = gName === "road" ? 2.6 : 2.4;
+    for (let v = 0; v < g.nb.length; v++) {
+      const [x, y] = P[v];
+      const deg = g.nb[v].length, rr = gName === "social" ? rad + Math.min(5, Math.sqrt(deg) * 0.55) : rad;
+      if (front.has(v)) continue;
+      if (dist[v] >= 0) ctx.fillStyle = `hsl(${hueFor(dist[v], total)} 80% 62%)`;
+      else ctx.fillStyle = tr.dist[v] < 0 ? C.district : C.dim;
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill();
+    }
+    // frontier with glow
+    const fc = lv ? (lv.device === "CPU" ? C.cpu : lv.dir === "BU" ? C.bu : C.gpu) : C.gpu;
+    ctx.shadowColor = fc; ctx.shadowBlur = 14; ctx.fillStyle = fc;
+    front.forEach((v) => { const [x, y] = P[v], deg = g.nb[v].length, rr = gName === "social" ? 3.4 + Math.min(5, Math.sqrt(deg) * 0.55) : 3.6; ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill(); });
+    // pulses for the level in progress
+    if (lv && prog > 0) {
+      const t = Math.min(1, prog);
+      const list = lv.edgesTo.length > 500 ? lv.edgesTo.filter((_, i) => i % Math.ceil(lv.edgesTo.length / 500) === 0) : lv.edgesTo;
+      ctx.fillStyle = fc; ctx.shadowBlur = 10;
+      for (const [a, b] of list) {
+        const [s, e] = lv.dir === "BU" ? [P[b], P[a]] : [P[a], P[b]];  // bottom-up: the unvisited vertex reaches out
+        const x = s[0] + (e[0] - s[0]) * t, y = s[1] + (e[1] - s[1]) * t;
+        ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill();
+      }
+    }
+    // newly reached vertices flash
+    ctx.shadowBlur = 18;
+    flashes = flashes.filter((f) => f.t > 0);
+    for (const f of flashes) {
+      const [x, y] = P[f.v];
+      ctx.globalAlpha = f.t; ctx.fillStyle = "#ffffff"; ctx.shadowColor = fc;
+      ctx.beginPath(); ctx.arc(x, y, 3 + 5 * (1 - f.t), 0, 7); ctx.fill();
+      f.t -= 0.06;
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  }
+
+  function levelDuration() { return (gName === "social" ? 1500 : 620) / +$("sim-speed").value; }
+  function tick(ts) {
+    if (!playing) { if (flashes.length) { draw(); requestAnimationFrame(tick); } return; }
+    const dt = last ? ts - last : 16; last = ts;
+    if (done < tr.levels.length) {
+      if (prog === 0) setChips(tr.levels[done]);
+      prog += dt / levelDuration();
+      if (prog >= 1) finishLevel();
+      updateStats();
+    }
+    draw();
+    requestAnimationFrame(tick);
+  }
+  function play() {
+    if (done >= tr.levels.length) reset();
+    playing = !playing; last = 0;
+    $("sim-play").textContent = playing ? "Pause" : "Play";
+    if (playing) requestAnimationFrame(tick);
+  }
+  function step() {
+    playing = false; $("sim-play").textContent = "Play";
+    if (done >= tr.levels.length) reset();
+    setChips(tr.levels[done]); prog = 1; finishLevel();
+    requestAnimationFrame(tick);
+  }
+
+  document.querySelectorAll("[data-graph]").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("[data-graph]").forEach((x) => x.classList.toggle("on", x === b));
+    gName = b.dataset.graph; reset();
+    if (playing) { last = 0; }
+  }));
+  document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("[data-mode]").forEach((x) => x.classList.toggle("on", x === b));
+    mode = b.dataset.mode; reset();
+  }));
+  $("sim-play").addEventListener("click", play);
+  $("sim-step").addEventListener("click", step);
+  $("sim-restart").addEventListener("click", () => { const was = playing; playing = false; reset(); if (was) play(); else $("sim-play").textContent = "Play"; });
+  addEventListener("resize", resize);
+  document.addEventListener("visibilitychange", () => { if (document.hidden && playing) play(); });
+
+  reset(); resize();
+  // start once the stage scrolls into view (not for reduced-motion viewers)
+  if (!reduce && "IntersectionObserver" in window) {
+    let started = false;
+    new IntersectionObserver((es) => { if (!started && es.some((e) => e.isIntersecting)) { started = true; if (!playing) play(); } }, { threshold: 0.35 }).observe($("stage"));
+  }
 })();
 </script>
 </body>
