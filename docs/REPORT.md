@@ -27,9 +27,10 @@ the CPU, working in place on the GPU's buffers (no copies, thanks to unified mem
   need 29–34 iterations where the GPU's Jacobi iteration needs 44–62.
 - An in-place (Gauss–Seidel-style) GPU kernel (Phase 12) cuts sweeps by up to
   ~47% at the same tolerance, but converges unevenly: vertices updated in the same
-  GPU wave stay at Jacobi speed. **At equal accuracy it is 1.1–1.4× faster than
-  Jacobi on three graphs and 0.8–0.9× on the other three**, and it still does not
-  beat GAP except on roadNet-CA (a tie).
+  GPU wave stay at Jacobi speed. Deferring one vertex of each tight mutual pair
+  (Phase 13) fixes the worst of them. **At equal accuracy it is 1.40–1.68× faster
+  than Jacobi on Pokec, web-Google and Orkut** and ties on two more graphs. On
+  Pokec it is now slightly faster than GAP.
 - Real input orderings already carry most of the available locality: random labels
   slow PageRank 2–3×. Reverse Cuthill–McKee (RCM) improves on the input order for
   PageRank but *hurts* direction-optimizing BFS, because it delays bottom-up
@@ -634,7 +635,66 @@ Coloring delivers it for low-degree graphs. For skewed graphs, eight
 Jones–Plassmann rounds leave most vertices uncolored, and the natural order's
 gain is partly an illusion of the stopping test. Making it work on social graphs
 would need either an order that separates mutually dependent vertices (e.g.
-coloring only the slow structures) or a per-vertex convergence test.
+coloring only the slow structures) or a per-vertex convergence test. Section
+4.14 tries both.
+
+### 4.14 Fixing the stragglers (Phase 13)
+
+**Diagnosis.** After running `gpu_pull_gs` to tol 1e-6, the ten worst top-1000
+vertices on each graph (vs the converged reference) were almost all **strongly
+coupled mutual pairs**: u → v and v → u, with out-degrees of 1–2, so each passes
+most of its rank to the other.
+- **Worst cases:** both partners sit in the same 32-vertex block (soc-Pokec
+  151826 ↔ 151828; soc-LiveJournal1 341090 ↔ 341091).
+- **web-Google:** a 3-vertex cluster whose IDs land in the same wave.
+- **com-Orkut** (undirected, high degree) had none, which is why it was the one
+  graph that matched Jacobi's accuracy at the same tol.
+
+**Fix (a): pair deferral.** During preprocessing, every mutual pair with both
+out-degrees ≤ 2 is found. One vertex per pair is moved to a second, small
+dispatch that runs after all other vertices, so it always reads its partner's
+fresh value: the pair then converges at d² per sweep instead of d. The choice is
+greedy in ID order, so the deferred set never contains a pair. A first version
+deferred both 873801 and 875012 in web-Google's cluster, and they ran
+concurrently again.
+
+| dataset | deferred vertices | worst top-1000 rel. error at tol 1e-6, K=0 | K=2 | Jacobi |
+|---|---|---|---|---|
+| web-Google | 6,510 | 9.0e-4 | 1.0e-4 | 5.0e-5 |
+| soc-Pokec | 4,029 | 1.46e-2 | **7.3e-4** | 1.1e-3 |
+| soc-LiveJournal1 | 43,632 | 1.81e-3 | **1.9e-5** | 4.0e-4 |
+| com-Orkut | 363 | 5.8e-6 | 5.7e-6 | 1.5e-5 |
+
+It costs no extra sweeps. Each sweep becomes 10–17% more expensive (two
+list-driven dispatches instead of one direct dispatch). roadNet-CA uses the
+colored order and needs no deferral.
+
+**Fix (b): per-vertex stopping test.** `--tol-rel R` additionally requires the
+largest per-vertex change, |Δr_v| / max(r_v, 1/n), to be below R. Dividing by
+r_v alone was dominated by tiny-rank vertices whose relative changes are float
+noise (LiveJournal stalled near 1e-4).
+- **Where it helped:** the fastest equal-accuracy rule on web-Google (35 sweeps;
+  pure L1 rules needed 46) and on Orkut.
+- **Where it didn't:** on LiveJournal it over-iterates (56 sweeps), because some
+  low-rank vertex keeps moving ~0.2% long after the important ones settle. It is
+  a stronger guarantee rather than a universal speed-up.
+
+**Result at equal accuracy** (the same strict rule as 4.13; every candidate
+stopping rule is in `results/pr_gs_search.csv`):
+
+| dataset | best Jacobi, ms | Phase 12, ms | Phase 13, ms (rule, sweeps) | speedup vs Jacobi | GAP, ms |
+|---|---|---|---|---|---|
+| Facebook | 9.51 | 11.7 | 12.2 (tol 2.5e-7, 56) | 0.78× | 4.50 |
+| web-Google | 107 | 88.6 | 76.4 (tol 1e-6 + rel 5e-5, 35) | **1.40×** | 53.8 |
+| roadNet-CA | 72.7 | 63.6 | 66.5 (tol 2.5e-7, 33) | 1.09× | 65.0 |
+| Pokec | 320 | 352 | **190** (tol 1e-6, 24) | **1.68×** | 197 |
+| LiveJournal | 719 | 901 | 730 (tol 5e-7, 40) | 0.99× | 650 |
+| Orkut | 2247 | 1618 | 1609 (tol 1e-6 + rel 5e-5, 32) | **1.40×** | 1522 |
+
+Deferral turned Pokec from a 0.91× loss into a 1.68× win, slightly ahead of GAP.
+LiveJournal went from 0.80× to a tie. roadNet-CA's difference between the two
+phases (63.6 vs 66.5 ms) is run-to-run noise, since its algorithm did not change.
+GAP remains ahead on web-Google, LiveJournal and Orkut.
 
 ## 5. Summary of hypotheses (PLAN §10)
 
@@ -647,7 +707,7 @@ coloring only the slow structures) or a per-vertex convergence test.
 | Random ordering much slower; RCM/degree may improve | **Confirmed for random** (1.9–3.1×). RCM helps PageRank (up to 2.3×) but hurts DO-BFS on social graphs; degree helps only web-Google |
 | Smaller graphs have higher GTEPS due to the cache | **Wrong for BFS** (fixed per-level costs dominate small graphs). Weakly true for PageRank, where locality matters more |
 | (Phase 11) GAP as the state-of-the-art CPU baseline | Our `cpu_do` matches GAP's BFS; the hybrid beats it 1.7–2.3× on social graphs. GAP's PageRank nearly ties the GPU per iteration on Pokec/Orkut and wins to convergence through Gauss–Seidel |
-| (Phase 12) In-place updates would bring Gauss–Seidel's gain to the GPU | **Partly.** Same-tol sweeps drop up to ~47%, but in-wave dependencies stay at Jacobi speed; at equal accuracy 1.14–1.39× faster on 3 graphs, 0.8–0.9× on 3 |
+| (Phases 12–13) In-place updates would bring Gauss–Seidel's gain to the GPU | **Partly.** In-wave mutual pairs stay at Jacobi speed until deferred (Phase 13). At equal accuracy 1.40–1.68× faster than Jacobi on Pokec, web-Google and Orkut, a tie on LiveJournal and roadNet-CA, slower on Facebook; ahead of GAP only on Pokec |
 
 ## 6. Limitations
 
@@ -684,11 +744,10 @@ coloring only the slow structures) or a per-vertex convergence test.
   could combine RCM's PageRank locality with fast bottom-up exits (4.8).
 - **Restrict OpenMP to P-cores** (thread affinity / QoS classes) for barrier-heavy
   phases, and give E-cores only independent work.
-- **Better update orders for in-place GPU PageRank (4.13).** For example, color
-  only the vertices that converge slowly (short cycles, mutual links), or place
-  mutually dependent vertices in different waves. Also a per-vertex or
-  sampled-residual stopping test, so the global L1 change cannot hide in-wave
-  stragglers.
+- **Extend straggler deferral (4.14) from mutual pairs to short cycles.** Also
+  make the deferred dispatch cheaper (it currently adds 10–17% per sweep), and
+  find a per-vertex stopping test that ignores low-rank noise without
+  over-iterating (LiveJournal).
 - **Compressed or 16-bit-delta CSR** to fit larger graphs in 8 GB and to reduce
   bytes per edge on this bandwidth-bound chip.
 - **Asynchronous / delta PageRank**, which touches only vertices whose rank still

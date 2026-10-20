@@ -28,6 +28,7 @@ struct GpuPrOptions {
     float damping = 0.85f;
     int iters = 20;          // fixed mode: iterations; tol mode: cap
     double tol = 0;          // > 0: stop when the L1 change < tol
+    double tolRel = 0;       // > 0 (tol mode): ALSO require max_v |change_v| / max(r_v, 1/n) < tolRel (Phase 13)
     uint32_t tg = 256;       // threadgroup size of the main kernels (multiple of 32)
     uint32_t smallMax = 16;  // adaptive: in-degree < smallMax -> small bin
     uint32_t largeMin = 256; // adaptive: in-degree >= largeMin -> threadgroup per vertex
@@ -37,6 +38,7 @@ struct GpuPrOptions {
 struct GpuPrResult {
     int iters = 0;
     double lastDelta = -1;   // tol mode only
+    double lastMaxRel = -1;  // tol mode only: max relative per-vertex change of the last iteration
     bool floorStop = false;  // tol mode: stopped because the L1 change stagnated above tol
     double gpuMs = 0;        // kernel time, summed over command buffers
 };
@@ -72,11 +74,17 @@ public:
     // kernel on the graphs that reach this branch (social/web); in-place
     // degree-bin order (gpu_pull_adaptive --inplace) needs about the same
     // number of sweeps (scripts/bench_gs.sh ablation).
-    // Limitation: vertices updated in the same wave still read each other's
-    // old values, so local structures such as a 2-cycle with adjacent ids
-    // converge only at the Jacobi rate while the rest of the graph is faster;
-    // the global L1-change stopping test then stops too early for them.
-    void prepareGS();
+    // Vertices updated in the same wave read each other's old values, so a
+    // strongly coupled mutual pair (u <-> v, each passing most of its rank to
+    // the other) converges only at the Jacobi rate d per sweep while the rest
+    // of the graph is faster, and the global L1-change test stops too early
+    // for it (soc-Pokec 151826 <-> 151828: outdeg 1 each, same simdgroup;
+    // 30x Jacobi's error at the stop). Phase 13: in natural order, one vertex
+    // of every mutual pair with both out-degrees <= pairMaxOutdeg is deferred
+    // to a second dispatch after all other vertices, so it always reads its
+    // partner's fresh value (rate d^2 for the pair). 0 disables deferral.
+    void prepareGS(uint32_t pairMaxOutdeg = 2);
+    size_t gsDeferred() const { return gsDeferredCount_; }
     bool gsColored() const { return gsColored_; }
     size_t gsSets() const { return gsBlocks_.size(); }
 
@@ -92,12 +100,16 @@ private:
     uint32_t n_;
     Params params_{};
     id<MTLBuffer> rowOut_, colOut_, rowIn_, colIn_, outdeg_;
-    id<MTLBuffer> r_[2], contrib_, acc_, accLo_, partial_, scalars_;
+    id<MTLBuffer> r_[2], contrib_, acc_, accLo_, partial_, partialMax_, scalars_;
     id<MTLBuffer> bins_[3];
     uint32_t binCount_[3] = {0, 0, 0};
     uint32_t binSmall_ = 0, binLarge_ = 0;  // thresholds the bins were built for
     bool binsReady_ = false;
     bool gsReady_ = false, gsColored_ = false;
+    uint32_t gsPairK_ = 0;
+    size_t gsDeferredCount_ = 0;
+    id<MTLBuffer> gsNatA_, gsNatB_;  // natural order with deferral: main list, deferred list
+    uint32_t gsNatASize_ = 0, gsNatBSize_ = 0;
     std::vector<id<MTLBuffer>> gsBlocks_;
     std::vector<uint32_t> gsBlockSize_;
     // Colored mode: relabeled in-CSR / out-degrees, newId[old], and the
@@ -110,7 +122,7 @@ private:
     int cur_ = 0;
     size_t reduceGroups_;
     id<MTLComputePipelineState> init_, contribK_, diff_, reduce_, push_, pushFin_, scalar_, vector_,
-        small_, medium_, large_, sum_, scale_;
+        small_, medium_, large_, sum_, scale_, reduceMax_;
     std::unique_ptr<Primitives> prims_;
 };
 

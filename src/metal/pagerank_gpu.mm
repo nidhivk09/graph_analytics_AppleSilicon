@@ -8,7 +8,7 @@ namespace gpu {
 namespace {
 constexpr size_t kTG = 256;
 constexpr size_t kMaxGroups = 1024;  // reduction pass 2 is one 1024-thread group
-enum { kDangling = 0, kDelta = 1, kSum = 2 };
+enum { kDangling = 0, kDelta = 1, kSum = 2, kMaxRel = 3 };
 
 void checkCompleted(id<MTLCommandBuffer> cb) {
     if (cb.status != MTLCommandBufferStatusCompleted) {
@@ -47,6 +47,7 @@ GpuPageRank::GpuPageRank(MetalContext& ctx, const graph::CSR& out, const graph::
     }
     reduceGroups_ = std::min(kMaxGroups, std::max<size_t>(1, ((size_t)n_ + kTG - 1) / kTG));
     partial_ = ctx.buffer(reduceGroups_ * 4);
+    partialMax_ = ctx.buffer(reduceGroups_ * 4);
     scalars_ = ctx.buffer(4 * 4);
 
     init_ = ctx.pipeline("pagerank", "pr_init");
@@ -62,6 +63,7 @@ GpuPageRank::GpuPageRank(MetalContext& ctx, const graph::CSR& out, const graph::
     large_ = ctx.pipeline("pagerank", "pr_pull_large");
     sum_ = ctx.pipeline("pagerank", "pr_sum");
     scale_ = ctx.pipeline("pagerank", "pr_scale");
+    reduceMax_ = ctx.pipeline("pagerank", "pr_reduce_max");
     prims_ = std::make_unique<Primitives>(ctx);
 }
 
@@ -83,8 +85,9 @@ void GpuPageRank::prepareAdaptive(uint32_t smallMax, uint32_t largeMin) {
     binsReady_ = true;
 }
 
-void GpuPageRank::prepareGS() {
-    if (gsReady_) return;
+void GpuPageRank::prepareGS(uint32_t pairMaxOutdeg) {
+    if (gsReady_ && gsPairK_ == pairMaxOutdeg) return;
+    gsPairK_ = pairMaxOutdeg;
     if (!rowIn_) throw std::runtime_error("gpu_pull_gs needs the in-CSR");
     constexpr int kGsColors = 8;
     constexpr double kMinCoverage = 0.95;
@@ -150,6 +153,40 @@ void GpuPageRank::prepareGS() {
         rowGS_ = ctx_.buffer(row.data(), row.size() * 4);
         colGS_ = col.empty() ? ctx_.buffer(4) : ctx_.buffer(col.data(), col.size() * 4);  // m = 0: placeholder
         outdegGS_ = ctx_.buffer(deg.data(), deg.size() * 4);
+    }
+    // Natural order: defer one vertex of each strongly coupled mutual pair.
+    // u -> v exists iff u is in v's in-list (sorted: binary search). Greedy in
+    // id order: v is deferred if it has a lower-id partner and none of its
+    // lower-id partners is deferred, so the deferred set contains no pair
+    // (otherwise partners would again run concurrently in the second
+    // dispatch: web-Google 873801 with both 750372 and 875012).
+    gsDeferredCount_ = 0;
+    gsNatASize_ = gsNatBSize_ = 0;
+    if (!gsColored_ && pairMaxOutdeg > 0) {
+        const uint32_t* od = static_cast<const uint32_t*>(outdeg_.contents);
+        std::vector<uint8_t> deferred(n_, 0);
+        for (uint32_t v = 0; v < n_; ++v) {
+            if (od[v] == 0 || od[v] > pairMaxOutdeg) continue;
+            bool hasPartner = false, partnerDeferred = false;
+            for (uint32_t e = rp[v]; e < rp[v + 1] && !partnerDeferred; ++e) {
+                uint32_t u = ci[e];  // u -> v
+                if (u >= v || od[u] == 0 || od[u] > pairMaxOutdeg) continue;
+                if (std::binary_search(ci + rp[u], ci + rp[u + 1], v)) {  // v -> u too
+                    hasPartner = true;
+                    partnerDeferred = deferred[u];
+                }
+            }
+            deferred[v] = hasPartner && !partnerDeferred;
+        }
+        std::vector<uint32_t> a, b;
+        for (uint32_t v = 0; v < n_; ++v) (deferred[v] ? b : a).push_back(v);
+        if (!b.empty()) {
+            gsDeferredCount_ = b.size();
+            gsNatASize_ = (uint32_t)a.size();
+            gsNatBSize_ = (uint32_t)b.size();
+            gsNatA_ = ctx_.buffer(a.data(), a.size() * 4);
+            gsNatB_ = ctx_.buffer(b.data(), b.size() * 4);
+        }
     }
     gsReady_ = true;
 }
@@ -225,6 +262,17 @@ void GpuPageRank::encodeIteration(id<MTLComputeCommandEncoder> enc, PrVariant v,
                 [enc setBuffer:gsBlocks_[b] offset:0 atIndex:6];
                 MetalContext::dispatch1D(enc, small_, gsBlockSize_[b], tg);
             }
+        } else if (v == PrVariant::PullGS && gsNatBSize_ > 0) {
+            // Natural order with deferred pair partners: simdgroup per vertex
+            // (as gpu_pull_vector) over the main list, then the deferred list.
+            const std::pair<id<MTLBuffer>, uint32_t> lists[2] = {{gsNatA_, gsNatASize_}, {gsNatB_, gsNatBSize_}};
+            for (const auto& [list, size] : lists) {
+                Params p = params_;
+                p.size = size;
+                [enc setBytes:&p length:sizeof p atIndex:5];
+                [enc setBuffer:list offset:0 atIndex:6];
+                MetalContext::dispatch1D(enc, medium_, (size_t)size * 32, tg);
+            }
         } else if (v == PrVariant::PullScalar) {
             MetalContext::dispatch1D(enc, scalar_, n_, tg);
         } else if (v == PrVariant::PullVector || v == PrVariant::PullGS) {
@@ -271,8 +319,16 @@ void GpuPageRank::encodeIteration(id<MTLComputeCommandEncoder> enc, PrVariant v,
         [enc setBuffer:rNew offset:0 atIndex:1];
         [enc setBuffer:partial_ offset:0 atIndex:2];
         [enc setBytes:&params_ length:sizeof params_ atIndex:3];
+        [enc setBuffer:partialMax_ offset:0 atIndex:4];
         [enc dispatchThreadgroups:MTLSizeMake(groups, 1, 1) threadsPerThreadgroup:MTLSizeMake(kTG, 1, 1)];
         reduceTo(&slotX);
+        const uint32_t slotM = kMaxRel;
+        [enc setComputePipelineState:reduceMax_];
+        [enc setBuffer:partialMax_ offset:0 atIndex:0];
+        [enc setBuffer:scalars_ offset:0 atIndex:1];
+        [enc setBytes:&groups length:4 atIndex:2];
+        [enc setBytes:&slotM length:4 atIndex:3];
+        [enc dispatchThreadgroups:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1024, 1, 1)];
     }
     cur_ ^= 1;
 }
@@ -283,7 +339,7 @@ GpuPrResult GpuPageRank::run(PrVariant v, const GpuPrOptions& opt) {
     if (v == PrVariant::Push && !rowOut_) throw std::runtime_error("gpu_push needs the out-CSR");
     if (v != PrVariant::Push && !rowIn_) throw std::runtime_error("pull variants need the in-CSR");
     if (v == PrVariant::PullAdaptive) prepareAdaptive(opt.smallMax, opt.largeMin);
-    if (v == PrVariant::PullGS) prepareGS();
+    if (v == PrVariant::PullGS && !gsReady_) prepareGS();  // keep the caller's pair setting
 
     params_ = {n_, opt.damping, (1.0f - opt.damping) / (float)n_, 1.0f / (float)n_, 0,
                (v == PrVariant::PullGS || opt.inPlace) ? 1u : 0u};
@@ -340,7 +396,8 @@ GpuPrResult GpuPageRank::run(PrVariant v, const GpuPrOptions& opt) {
                 end(cb, enc);
                 res.iters = it + 1;
                 res.lastDelta = scalars[kDelta];
-                if (res.lastDelta < opt.tol) break;
+                res.lastMaxRel = scalars[kMaxRel];
+                if (res.lastDelta < opt.tol && (opt.tolRel <= 0 || res.lastMaxRel < opt.tolRel)) break;
                 if (res.lastDelta < best) { best = res.lastDelta; sinceBest = 0; }
                 else if (++sinceBest >= kStagnation) { res.floorStop = true; break; }
             }

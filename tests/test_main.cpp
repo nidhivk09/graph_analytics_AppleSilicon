@@ -725,18 +725,24 @@ TEST(pagerank_variants_match_reference) {
 //    GS's per-sweep change understates its distance from the fixed point
 //    more than Jacobi's does, so at EQUAL tol GS can stop less accurate
 //    (rmat12 natural order: top-1000 rel 1.07e-3 vs Jacobi 7.4e-5).
+// Phase 13 adds: both pair-deferral settings (K = 0 off, K = 2 default)
+// and the per-vertex stopping rule (tol 1e-6 + tolRel 2.5e-5), which must
+// also be no less accurate than Jacobi at 1e-6.
 // Mutation checks (each caught): no renormalization; wrong in-place
 // contribution (val / (d + 1)). The suite exercises both update orders
-// (colored: path, grid, ...; natural: complete200, rmat12).
+// (colored: path, grid, ...; natural: complete200, rmat12) and deferral
+// (rmat12 has mutual pairs with out-degree <= 2).
 TEST(pagerank_gs_converges_to_reference) {
-    int colored = 0, natural = 0, failures = 0;
-    for (auto& [name, g] : graph::gen::suite()) {
+    int colored = 0, natural = 0, deferredGraphs = 0, failures = 0;
+    for (auto& [name, g] : graph::gen::suite())
+    for (uint32_t K : {0u, 2u}) {
         if (g.n == 0) continue;
         CSR in = g.directed() ? graph::transpose(g) : g;
         auto od = cpu::outDegrees(g);
         gpu::GpuPageRank gpr(ctx(), g, in, od, false, true);
-        gpr.prepareGS();
+        gpr.prepareGS(K);
         (gpr.gsColored() ? colored : natural)++;
+        if (gpr.gsDeferred() > 0) deferredGraphs++;
         cpu::PrOptions conv;
         conv.tol = 1e-10;
         conv.iters = 1000;
@@ -748,10 +754,12 @@ TEST(pagerank_gs_converges_to_reference) {
         cpu::pagerankSerial(in, od.data(), jac.data(), co);
         const cpu::PrCheck jacobiErr = cpu::checkRanks(refConv, jac.data());
         for (uint32_t tg : {32u, 256u, 1024u}) {
-            struct Run { const char* what; double tol; int iters; };
-            for (Run run : {Run{"20 sweeps", 0.0, 20}, Run{"200 sweeps", 0.0, 200}, Run{"tol 2.5e-7", 2.5e-7, 1000}}) {
+            struct Run { const char* what; double tol, tolRel; int iters; };
+            for (Run run : {Run{"20 sweeps", 0.0, 0.0, 20}, Run{"200 sweeps", 0.0, 0.0, 200},
+                            Run{"tol 2.5e-7", 2.5e-7, 0.0, 1000}, Run{"tol 1e-6 + rel 2.5e-5", 1e-6, 2.5e-5, 1000}}) {
                 gpu::GpuPrOptions o;
                 o.tol = run.tol;
+                o.tolRel = run.tolRel;
                 o.iters = run.iters;
                 o.tg = tg;
                 gpu::GpuPrResult r = gpr.run(gpu::PrVariant::PullGS, o);
@@ -761,8 +769,8 @@ TEST(pagerank_gs_converges_to_reference) {
                                              : cpu::gsNoWorseThanJacobi(c, jacobiErr);
                 if (!ok) {
                     failures++;
-                    std::printf("    %s %s %s tg %u: L1 %.3g rel %.3g sum %.8f (%d it; Jacobi@1e-6 L1 %.3g rel %.3g)\n",
-                                name.c_str(), gpr.gsColored() ? "colored" : "natural", run.what, tg, c.l1,
+                    std::printf("    %s %s K=%u %s tg %u: L1 %.3g rel %.3g sum %.8f (%d it; Jacobi@1e-6 L1 %.3g rel %.3g)\n",
+                                name.c_str(), gpr.gsColored() ? "colored" : "natural", K, run.what, tg, c.l1,
                                 c.maxRelTop, c.sum, r.iters, jacobiErr.l1, jacobiErr.maxRelTop);
                 }
             }
@@ -771,6 +779,7 @@ TEST(pagerank_gs_converges_to_reference) {
     CHECK(failures == 0);
     CHECK(colored > 0);
     CHECK(natural > 0);
+    CHECK(deferredGraphs > 0);
 }
 
 // ---------------------------------------------------------------- Phase 9

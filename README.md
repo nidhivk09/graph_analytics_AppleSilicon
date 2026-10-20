@@ -4,7 +4,9 @@ Breadth-first search and PageRank as Metal compute kernels on an 8 GB Apple M2,
 compared with OpenMP CPU baselines and the GAP Benchmark Suite on six SNAP graphs (4K to 234M edges). Every
 GPU result is validated against a serial CPU reference: BFS must match exactly,
 and PageRank must have L1 error < 1e-4. The full write-up with all figures is
-**[docs/REPORT.md](docs/REPORT.md)**. `PLAN.md` holds the design and
+**[docs/REPORT.md](docs/REPORT.md)**; a presentation website with interactive
+explanations is **[docs/index.html](docs/index.html)** (open it locally, or serve
+it with GitHub Pages from the `/docs` folder). `PLAN.md` holds the design and
 `PROGRESS.md` the phase-by-phase log.
 
 ## Headline results (M2, 10-core GPU, measured 95 GB/s)
@@ -33,10 +35,11 @@ and PageRank must have L1 error < 1e-4. The full write-up with all figures is
   degree-adaptive kernel is within 10% of the best everywhere. Against GAP the GPU
   is 1.0–2.6× faster per iteration, but GAP's Gauss–Seidel needs ~40% fewer
   iterations and **reaches convergence first on every graph**.
-- **In-place (Gauss–Seidel-style) GPU PageRank** (`gpu_pull_gs`, Phase 12) cuts
-  sweeps by up to ~47%, but vertices updated in the same GPU wave stay at Jacobi
-  speed. At equal accuracy it is 1.14–1.39× faster than Jacobi on Orkut,
-  web-Google and roadNet-CA, and 0.8–0.9× on the other three (report 4.13).
+- **In-place (Gauss–Seidel-style) GPU PageRank** (`gpu_pull_gs`, Phases 12–13)
+  cuts sweeps by up to ~47%. Tight mutual vertex pairs updated in the same GPU
+  wave stay at Jacobi speed until one of each pair is deferred to a second pass.
+  At equal accuracy it is 1.40–1.68× faster than Jacobi on Pokec, web-Google and
+  Orkut, ties on two graphs, and on Pokec beats GAP (report 4.13–4.14).
 - **Orderings:** random labels cost 2–3× in PageRank. Reverse Cuthill–McKee helps
   PageRank (up to 2.3× on web-Google) but slows bottom-up BFS on social graphs,
   because it delays early exits.

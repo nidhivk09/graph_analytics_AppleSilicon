@@ -76,7 +76,7 @@ stage() {
     tuning_balanced) ./scripts/sweep_balanced.sh ;;
     tuning_do)       ./scripts/sweep_do.sh ;;
     tuning_tg)       ./scripts/sweep_tg.sh ;;
-    gs)      rm -f results/pr_gs.csv results/pr_gs_equal.csv results/pr_gs_ablation.csv; ./scripts/bench_gs.sh ;;
+    gs)      rm -f results/pr_gs.csv results/pr_gs_equal.csv results/pr_gs_ablation.csv results/pr_gs_search.csv results/pr_gs_pairs.csv; ./scripts/bench_gs.sh ;;
     *) echo "unknown stage '$s'" >&2; return 2 ;;
   esac 2>&1 | tee -a "$log"
   # A validation failure inside a stage makes gbench exit non-zero; with

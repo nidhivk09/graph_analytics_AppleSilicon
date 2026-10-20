@@ -4,7 +4,8 @@ Running log. A fresh session should be able to continue from `PLAN.md` + this fi
 
 ## Current state
 
-- **Phase 12 (extension beyond PLAN) complete** (2026-10-19): in-place GPU PageRank `gpu_pull_gs`. All PLAN phases 0–11 are done. GAP baseline: `scripts/gap.sh` (GAP in gitignored `external/gapbs`, pinned to 941462c).
+- **Phase 13 (extension) complete** (2026-10-20): straggler fixes for `gpu_pull_gs` (pair deferral, per-vertex stopping test). Phase 12 (2026-10-19): in-place GPU PageRank. All PLAN phases 0–11 are done.
+- Presentation website: `docs/index.html` (standalone, figures in `docs/figures`); also published as a private claude.ai artifact. GAP baseline: `scripts/gap.sh` (GAP in gitignored `external/gapbs`, pinned to 941462c).
 - Final results: `docs/REPORT.md` (11 figures in `figures/`, all from one `scripts/run_all.sh` run on AC power).
 - **Reference numbers** (Phase 3, AC power): GPU sequential DRAM bandwidth **~95 GB/s**;
   CPU (8 threads) ~61 GB/s read; dispatch round trip (commit + wait) **~111 µs**;
@@ -839,3 +840,42 @@ Not in PLAN.md. Requested after Phase 11 showed GAP's Gauss–Seidel PageRank co
 
 **Other notes**
 - The first `make test` attempts looked hung: the test process had been started as a zsh background job, which zsh runs at low priority (BG_NICE), while system Contacts daemons used ~90% of a core. The hybrid BFS test (one GPU sync per level) crawled. In the foreground the suite takes 1:39. Benchmarks use the harness's background mode, which is not niced (verified: gbench at nice 0). The final suite run (25/25) took 18 min at 2% CPU after the harness moved it to the background at its 10-min limit; the cause is not identified. GPU-sync-heavy tests crawl there. Benchmarks launched in background mode from the start produced timings consistent with foreground runs (e.g. GAP and run_all vs earlier phases).
+
+### 2026-10-20 · Phase 13 (extension): fixing the in-place PageRank stragglers
+
+Requested after Phase 12: try (a) an update order that separates mutually dependent vertices and (b) a per-vertex stopping test. Also built a presentation website.
+
+**Diagnosis first** (dumped GS@1e-6 and converged ranks; looked at the 10 worst top-1000 vertices per graph): almost all were **mutual pairs with out-degree 1–2** (each passes most of its rank to the other):
+- Pokec 151826↔151828 and LiveJournal 341090↔341091, both in the same 32-vertex block
+- web-Google 873801 with 750372 and 875012
+- Orkut (undirected, high degree): none
+
+**Built**
+- `GpuPageRank::prepareGS(pairMaxOutdeg = 2)`: in natural order, one vertex of each mutual pair with both out-degrees ≤ K goes to a second dispatch (simdgroup per vertex over a list: `pr_pull_medium`) after the main list. The choice is greedy in ID order, so the deferred set contains no pair. gbench `--gs-pairs K` (0 = off).
+- Per-vertex stopping test: `pr_diff` also computes max |Δ| / max(r, 1/n) (uint max on float bits, `pr_reduce_max` → `scalars[3]`). `GpuPrOptions::tolRel` / gbench `--tol-rel R` stops only when the L1 change < tol AND max < R. `GpuPrResult::lastMaxRel`.
+- `scripts/bench_gs.sh` rewritten: runs 9 candidate stopping rules per graph (L1 tols 1e-6…3.1e-8, and tol 1e-6 + tol-rel 1e-4/5e-5/2.5e-5), logs all to `results/pr_gs_search.csv`, keeps the fastest strict equal-accuracy run in `pr_gs_equal.csv`, and records K=0 vs K=2 in `pr_gs_pairs.csv`.
+- Test `pagerank_gs_converges_to_reference` now loops K ∈ {0, 2}, adds the tol + tolRel rule, and checks that some graph has deferred vertices (rmat12). 25/25.
+- Report section 4.14; the abstract, hypothesis table, future work and README are updated.
+
+**Bugs found on the way**
+- `run()` called `prepareGS()` with its default argument, silently overriding the caller's K, so the first "K=0" runs were really K=2 and looked impossibly good. Caught by rebuilding HEAD in a git worktree, which reproduced the old 1.46e-2 exactly. Fixed: `run()` only prepares if not already prepared.
+- The first deferral version deferred both 873801 and 875012 (partners of each other) in web-Google, so they ran concurrently again; hence the greedy rule.
+- `|Δ|/r` as the per-vertex measure was dominated by float noise on tiny-rank vertices; changed to `max(r, 1/n)`.
+- `bench_gs.sh`: `grep` with no match under `pipefail` aborted the script on colored-order graphs (no `deferred=` field); fixed with `|| true`. Re-ran roadNet-CA onward.
+
+**Results** (worst top-1000 rel error at tol 1e-6, K=0 → K=2): web-Google 9.0e-4 → 1.0e-4, Pokec 1.46e-2 → 7.3e-4, LiveJournal 1.81e-3 → 1.9e-5, Orkut unchanged. No extra sweeps; each sweep costs 10–17% more.
+
+Equal accuracy vs the best Jacobi GPU kernel (Phase 12 → Phase 13):
+
+| dataset | Phase 12 | Phase 13 | rule | GAP |
+|---|---|---|---|---|
+| Facebook | 0.81× | 0.78× (12.2 ms) | tol 2.5e-7 | 4.50 ms |
+| web-Google | 1.21× | **1.40×** (76.4 ms) | tol 1e-6 + rel 5e-5 | 53.8 ms |
+| roadNet-CA | 1.14× | 1.09× (66.5 ms; same algorithm, noise) | tol 2.5e-7 | 65.0 ms |
+| Pokec | 0.91× | **1.68×** (190 ms) | tol 1e-6 | 197 ms |
+| LiveJournal | 0.80× | 0.99× (730 ms) | tol 5e-7 | 650 ms |
+| Orkut | 1.39× | **1.40×** (1609 ms) | tol 1e-6 + rel 5e-5 | 1522 ms |
+
+**Per-vertex test verdict:** the fastest safe rule on web-Google and Orkut. On LiveJournal and Pokec it over-iterates (45–56 sweeps), because some low-rank vertex keeps moving ~0.2% after the L1 test fires. So it is a stronger guarantee, not a universal speed-up.
+
+**Website:** `docs/index.html`. It has the problem statement, an explanation section with two interactive demos (a BFS top-down/bottom-up stepper, and a PageRank Jacobi / GPU-wave / deferral / sequential-GS simulator on a 1,000-vertex model graph, prototyped in Node to check it shows the effect), setup, approach timeline, all results with figures, findings, the hypothesis table, conclusion, limits and reproduction steps. Also published privately as a claude.ai artifact.

@@ -13,6 +13,7 @@
 constant uint SC_DANGLING = 0;
 constant uint SC_DELTA = 1;
 constant uint SC_SUM = 2;      // gpu_pull_gs: total rank after the sweep (pr_sum)
+constant uint SC_MAXREL = 3;   // tol mode: max_v |a - b| / max(b, 1/n) (pr_diff, Phase 13)
 
 struct PrParams {
     uint n;
@@ -115,11 +116,18 @@ kernel void pr_scale(device float* r              [[buffer(0)]],
     if (gid < p.n) r[gid] /= scalars[SC_SUM];
 }
 
-// L1 change partials: sum |a - b|.
+// L1 change partials: sum |a - b|; also the max per-vertex change
+// |a - b| / max(b, 1/n) per threadgroup (Phase 13 per-vertex stopping test):
+// relative for above-average vertices, absolute (in units of 1/n) below.
+// Plain |a - b| / b was dominated by tiny-rank vertices whose relative
+// changes are float rounding noise (soc-LiveJournal1 stagnated at ~1e-4 and
+// hit the floor guard). Non-negative floats order like their bit patterns,
+// so the max is taken on uints (tg_max).
 kernel void pr_diff(device const float* a   [[buffer(0)]],
                     device const float* b   [[buffer(1)]],
                     device float* partial   [[buffer(2)]],
                     constant PrParams& p    [[buffer(3)]],
+                    device uint* partial_max [[buffer(4)]],
                     uint gid  [[thread_position_in_grid]],
                     uint grid [[threads_per_grid]],
                     uint tgid [[threadgroup_position_in_grid]],
@@ -129,10 +137,37 @@ kernel void pr_diff(device const float* a   [[buffer(0)]],
                     uint nsg  [[simdgroups_per_threadgroup]])
 {
     threadgroup float scratch[32];
-    float s = 0;
-    for (uint v = gid; v < p.n; v += grid) s += fabs(a[v] - b[v]);
+    threadgroup uint scratch_u[32];
+    float s = 0, mx = 0;
+    for (uint v = gid; v < p.n; v += grid) {
+        float d = fabs(a[v] - b[v]);
+        s += d;
+        mx = max(mx, d / max(b[v], p.inv_n));
+    }
     s = tg_sum_f(s, scratch, sid, lane, nsg);
-    if (tid == 0) partial[tgid] = s;
+    uint mu = tg_max(as_type<uint>(mx), scratch_u, sid, lane, nsg);
+    if (tid == 0) {
+        partial[tgid] = s;
+        partial_max[tgid] = mu;
+    }
+}
+
+// Pass 2 of the max: one threadgroup, max of `count` uint partials -> scalars[slot] (as float).
+kernel void pr_reduce_max(device const uint* partial [[buffer(0)]],
+                          device float* scalars      [[buffer(1)]],
+                          constant uint& count       [[buffer(2)]],
+                          constant uint& slot        [[buffer(3)]],
+                          uint tid  [[thread_index_in_threadgroup]],
+                          uint tgsz [[threads_per_threadgroup]],
+                          uint sid  [[simdgroup_index_in_threadgroup]],
+                          uint lane [[thread_index_in_simdgroup]],
+                          uint nsg  [[simdgroups_per_threadgroup]])
+{
+    threadgroup uint scratch[32];
+    uint m = 0;
+    for (uint i = tid; i < count; i += tgsz) m = max(m, partial[i]);
+    m = tg_max(m, scratch, sid, lane, nsg);
+    if (tid == 0) scalars[slot] = as_type<float>(m);
 }
 
 // Pass 2: one threadgroup sums `count` partials into scalars[slot].

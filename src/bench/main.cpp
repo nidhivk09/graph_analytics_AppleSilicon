@@ -13,6 +13,8 @@
 //   gbench --graph data/soc-LiveJournal1.bin --algo pr --variant gpu_pull_vector
 //          [--iters 20 | --tol 1e-6 [--iters 1000]] [--tg 256] [--small-max 16 --large-min 256]
 //          [--inplace] [--ref-tol T]   (Phase 12: gpu_pull_gs / in-place validation)
+//          [--gs-pairs 2]              (Phase 13: defer mutual pairs with outdeg <= K; 0 = off)
+//          [--tol-rel R]               (Phase 13, GPU tol mode: also stop only when max relative change < R)
 //          [--threads 8] [--warmup 2] [--trials 5] [--validate] [--csv results/pr.csv]
 //          [--dump-ranks out.f64]
 //   gbench --graph synth:star100k ...         use a generated test graph
@@ -449,6 +451,7 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
     gopt.smallMax = (uint32_t)args.getInt("small-max", 16);
     gopt.largeMin = (uint32_t)args.getInt("large-min", 256);
     gopt.inPlace = args.has("inplace");
+    gopt.tolRel = args.getDouble("tol-rel", 0);
 
     util::Timer prep;
     const bool needIn = variant != "gpu_push";
@@ -502,7 +505,7 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
         ctx = std::make_unique<gpu::MetalContext>();
         gpr = std::make_unique<gpu::GpuPageRank>(*ctx, graphP, in, outdeg, variant == "gpu_push", needIn);
         if (variant == "gpu_pull_adaptive") gpr->prepareAdaptive(gopt.smallMax, gopt.largeMin);
-        if (variant == "gpu_pull_gs") gpr->prepareGS();
+        if (variant == "gpu_pull_gs") gpr->prepareGS((uint32_t)args.getInt("gs-pairs", 2));
         in = CSR{};      // the GPU has its own copies; drop the host ones
         graphP = CSR{};
     }
@@ -516,9 +519,16 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
     if (variant == "cpu_omp")
         params += " threads=" + std::to_string(copt.threads > 0 ? copt.threads : omp_get_max_threads());
     if (gpuVariant) params += " tg=" + std::to_string(gopt.tg);
+    if (gopt.tolRel > 0) {
+        char r[32];
+        std::snprintf(r, sizeof r, " tol_rel=%g", gopt.tolRel);
+        params += r;
+    }
     if (gopt.inPlace) params += " inplace";
     if (variant == "gpu_pull_gs")
-        params += gpr->gsColored() ? " order=colored sets=" + std::to_string(gpr->gsSets()) : " order=natural";
+        params += gpr->gsColored() ? " order=colored sets=" + std::to_string(gpr->gsSets())
+                                   : " order=natural gs_pairs=" + std::to_string(args.getInt("gs-pairs", 2)) +
+                                         " deferred=" + std::to_string(gpr->gsDeferred());
     if (variant == "gpu_pull_adaptive")
         params += " small_max=" + std::to_string(gopt.smallMax) + " large_min=" + std::to_string(gopt.largeMin);
     std::printf("%s: n %llu, m %llu (directed=%d), ordering %s, prep %.0f ms\npr %s [%s]\n", dataset.c_str(),
@@ -527,7 +537,7 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
 
     std::vector<double> rcpu(n);
     // Runs the variant once; returns {iterations, gpu ms (or -1)}; sets lastDelta.
-    double lastDelta = -1;
+    double lastDelta = -1, lastMaxRel = -1;
     bool floorStop = false;
     auto runOnce = [&]() -> std::pair<int, double> {
         if (!gpuVariant) {
@@ -538,6 +548,7 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
         }
         gpu::GpuPrResult r = gpr->run(gpu::parsePrVariant(variant), gopt);
         lastDelta = r.lastDelta;
+        lastMaxRel = r.lastMaxRel;
         floorStop = r.floorStop;
         return {r.iters, r.gpuMs};
     };
@@ -617,6 +628,7 @@ int runPr(const util::Args& args, const CSR& stored, const std::string& dataset)
         if (tol > 0)
             std::printf(" | final L1 change %.3g%s", lastDelta,
                         lastDelta < tol ? "" : floorStop ? " (stopped at float precision floor)" : " (NOT converged)");
+        if (tol > 0 && lastMaxRel >= 0) std::printf(", max rel change %.3g", lastMaxRel);
         if (variant != "gpu_push" && variant != "cpu_serial") {
             // PLAN.md Phase 8 effective-bandwidth estimate, from the e2e time per iteration.
             double bytes = 4.0 * (n + 1) + 8.0 * m + 4.0 * n;
